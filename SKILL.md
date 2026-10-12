@@ -1,6 +1,6 @@
 ---
 name: daming-skillgain
-description: 用可复现的对照实验验证你的 Agent Skill 是否真的有效——同模型 with/without 配对执行、确定性断言判定优先、评委盲评辅助、跨宿主（OpenCode / Claude Code / Codex / script 等可驱动宿主）与版本回归支持，产出结果导向的静态 HTML 报告。内置资源预校验（preflight validator）与模型连通性测试，阻止不完整配置进入评测。
+description: 用可复现的对照实验验证你的 Skill 是否真的有效——同模型 with/without 配对执行、确定性断言判定优先、评委盲评辅助、跨宿主（OpenCode / Claude Code / Codex / script 等可驱动宿主）与版本回归支持，产出结果导向的静态 HTML 报告。内置资源预校验（preflight validator）与模型连通性测试，阻止不完整配置进入评测。
 license: GPL-3.0
 compatibility: 跨宿主（经 Subject Adapter 统一契约；报告标注本次已测宿主，结论仅适用于已测宿主）
 metadata:
@@ -29,9 +29,9 @@ metadata:
 
 ## When to use me
 
-- 想用可复现的对照实验验证某个 Agent Skill 是否真的有效（而不是「看起来有效」）
+- 想用可复现的对照实验验证某个 Skill 是否真的有效（而不是「看起来有效」）
 - 想知道 skill 在哪些模型上有正增益、在哪些模型上出现负迁移（应关闭）
-- 想在多个 Agent 宿主上分别验证 skill 效果（结论不跨宿主外推）
+- 想在多个宿主上分别验证 skill 效果（结论不跨宿主外推）
 - 需要对 skill 做版本回归：改版前后各跑一次同口径评测，比较 Skill Gain Δ
 - 准备发布 skill 前，需要一份可信、可复核的评测报告
 
@@ -42,7 +42,7 @@ metadata:
 - **证据不足不强判**：重复次数不足或置信区间跨 0 时，结论一律为 `inconclusive`；`repetitions` 默认 3（<3 显式警告样本不足）。
 - **评委只看结果文件**：评委永远只评价本次任务实际交付的 `validated_result_files` 内容；过程文件不进入评分。
 - **`without skill` 是自由基线且严格隔离**：不注入 skill、不泄露 skill 内容、提示词严格对称；加载证据证明 with 模式确实加载了 skill，否则该对作废。
-- **结论仅适用于已测宿主**：不同 Agent 宿主的 skill 注入约定与执行行为差异显著，报告显式标注已测宿主清单并禁止跨宿主外推。
+- **结论仅适用于已测宿主**：不同宿主的 skill 注入约定与执行行为差异显著，报告显式标注已测宿主清单并禁止跨宿主外推。
 - **合成数据标记**：使用 AI 生成的测试数据在报告中标记为 synthetic/mock。
 
 ## Workflow
@@ -216,9 +216,9 @@ python3 -m evaluator.cli verify-snapshot --run-dir <run目录>
 
 如果被测 skill 的 frontmatter 显式声明了 `required_resources`，评测器会优先使用该声明；没有声明时才自动识别。
 
-## 支持的 Agent 工具：三种接入方式，CLI 不是门槛
+## 支持的 AI 工具：三种接入方式，CLI 不是门槛
 
-**先说清一个常见误会**：本 skill 的 `--host` 等 CLI 参数是**评测器自己的入口**，不是对被测工具的要求。被测的 Agent 工具（Claude Code、Cursor、Trae、Windsurf、通义灵码、OpenCode、Cindy……）**不需要装任何额外东西**——只要它能被程序唤起干活（有命令行入口 / headless 模式 / 自带 API），就能接入评测。
+**先说清一个常见误会**：本 skill 的 `--host` 等 CLI 参数是**评测器自己的入口**，不是对被测工具的要求。被测的 AI 工具（Claude Code、Cursor、Trae、Windsurf、通义灵码、OpenCode、Cindy……）**不需要装任何额外东西**——只要它能被程序唤起干活（有命令行入口 / headless 模式 / 自带 API），就能接入评测。
 
 评测器经统一宿主调度层（`executors/`）+ Subject Adapter 分发，提供三种接入方式：
 
@@ -239,8 +239,8 @@ python3 -m evaluator.cli verify-snapshot --run-dir <run目录>
 | Trae | ② 脚本契约（包装其 CLI / headless 模式） | 同上 |
 | Windsurf | ② 脚本契约（包装 `windsurf`/`cascade` CLI 或 headless） | 同上 |
 | 通义灵码 | ② 脚本契约（包装其 CLI 入口） | 同上 |
-| Cindy / 其他桌面 Agent | ② 脚本契约（包装其命令行/自动化入口），或 ③ 若仅暴露 API | 链路已验证，具体包装待实测 |
-| 任意自写 Agent 脚本 | ② 脚本契约（本身就是契约脚本） | ✅ script 宿主端到端已验证 |
+| Cindy / 其他桌面 AI 工具 | ② 脚本契约（包装其命令行/自动化入口），或 ③ 若仅暴露 API | 链路已验证，具体包装待实测 |
+| 任意自写脚本 | ② 脚本契约（本身就是契约脚本） | ✅ script 宿主端到端已验证 |
 | 仅 API 可用（无执行环境） | ③ 直调 API（`--host api` / `standalone` / `agent`） | 代码就绪；产物型任务被能力预检显式拦截（无文件操作能力，如实告知） |
 
 ### 脚本契约：5 行接入指南（照抄即可）
@@ -285,6 +285,6 @@ python3 -m evaluator.cli run --plan-dir <run目录>
 ## Prerequisites
 
 - Python 3.10+（推荐 3.12+）
-- 至少一个能被程序唤起干活的 AI 工具：原生适配器宿主（如 OpenCode，开箱即用）、**任何工具经脚本契约包装**（≤10 行模板，见「支持的 Agent 工具」）、或纯 API 宿主（`api`/`standalone` 需 provider key，但不具备文件操作能力）
+- 至少一个能被程序唤起干活的 AI 工具：原生适配器宿主（如 OpenCode，开箱即用）、**任何工具经脚本契约包装**（≤10 行模板，见「支持的 AI 工具」）、或纯 API 宿主（`api`/`standalone` 需 provider key，但不具备文件操作能力）
 - 被测工具本身不需要装任何额外东西——评测器的 CLI 参数是评测器自己的入口，不是对被测工具的要求
 - 依赖安装：`pip install -r requirements.txt`
