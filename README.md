@@ -32,31 +32,7 @@
 查看结论、并排产出和运行证据，再决定发布或开关
 ```
 
-## 下载
-
-请到 Releases 页面下载最新的 Skill 包：
-
-[![Releases](https://img.shields.io/badge/⬇️_前往_Releases-下载最新版-2ea44f?style=for-the-badge)](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
-
-```bash
-unzip daming-skillgain-v*.zip
-cd daming-skillgain
-pip install -r requirements.txt
-python3 -m evaluator.cli simple
-```
-
-## 30 秒上手（从源码）
-
-需要 Python 3 和项目依赖；被测工具也需能在本机运行。也可以克隆仓库、安装依赖并启动交互式测评：
-
-```bash
-git clone https://github.com/dylanma8232-art/daming-skillgain.git
-cd daming-skillgain
-pip install -r requirements.txt
-python3 -m evaluator.cli simple
-```
-
-按提示选择 Skill、任务、被测模型和评委，完成后打开生成的 `report.html`。
+## 报告长什么样
 
 ![真实报告截图：总结、按模型的结果和启用与不启用 Skill 的产出对照](assets/report-screenshot.png)
 
@@ -84,5 +60,29 @@ python3 -m evaluator.cli simple
 **评委会替我定义正确答案吗？** 不会。任务目标由你提供；可配置的确定性规则检查指定要求，评委比较实际交付物。
 
 **可以用于商业项目吗？** 可以。项目采用 GPL-3.0，分发或修改后的项目须遵守该许可证。
+
+## 安装与使用
+
+请到 Releases 页面下载最新的 Skill 包：
+
+[![Releases](https://img.shields.io/badge/⬇️_前往_Releases-下载最新版-2ea44f?style=for-the-badge)](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
+
+```bash
+unzip daming-skillgain-v*.zip
+cd daming-skillgain
+pip install -r requirements.txt
+python3 -m evaluator.cli simple
+```
+
+也可以从源码安装（需要 Python 3 和项目依赖；被测工具也需能在本机运行）：
+
+```bash
+git clone https://github.com/dylanma8232-art/daming-skillgain.git
+cd daming-skillgain
+pip install -r requirements.txt
+python3 -m evaluator.cli simple
+```
+
+按提示选择 Skill、任务、被测模型和评委，完成后打开生成的 `report.html`。
 
 License: [GPL-3.0](LICENSE)

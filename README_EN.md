@@ -32,31 +32,7 @@ Apply deterministic checks; judges compare actual deliverables anonymously
 Review verdicts, side-by-side outputs, and run evidence before release
 ```
 
-## Download
-
-Get the latest Skill package from the Releases page:
-
-[![Releases](https://img.shields.io/badge/⬇️_Go_to_Releases-Download_latest-2ea44f?style=for-the-badge)](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
-
-```bash
-unzip daming-skillgain-v*.zip
-cd daming-skillgain
-pip install -r requirements.txt
-python3 -m evaluator.cli simple
-```
-
-## Get started in 30 seconds (from source)
-
-Requires Python 3 and the project dependencies. The tool under test must also run on your machine. You can also clone the repository, install dependencies, and start the guided evaluation:
-
-```bash
-git clone https://github.com/dylanma8232-art/daming-skillgain.git
-cd daming-skillgain
-pip install -r requirements.txt
-python3 -m evaluator.cli simple
-```
-
-Follow the prompts to choose a Skill, task, test models, and judges. Open the generated `report.html` when the run finishes.
+## What the report looks like
 
 ![Actual report screenshot: summary, per-model results, and deliverables with and without the Skill](assets/report-screenshot.png)
 
@@ -84,5 +60,29 @@ The summary gives the verdict; per-model results and side-by-side deliverables s
 **Do judges define the right answer?** No. You set the task goal. Configured deterministic rules check specified requirements, while judges compare the deliverables.
 
 **Can I use it commercially?** Yes. The project uses GPL-3.0; distributed or modified versions must follow that license.
+
+## Install and use
+
+Get the latest Skill package from the Releases page:
+
+[![Releases](https://img.shields.io/badge/⬇️_Go_to_Releases-Download_latest-2ea44f?style=for-the-badge)](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
+
+```bash
+unzip daming-skillgain-v*.zip
+cd daming-skillgain
+pip install -r requirements.txt
+python3 -m evaluator.cli simple
+```
+
+Or install from source (requires Python 3 and the project dependencies; the tool under test must also run on your machine):
+
+```bash
+git clone https://github.com/dylanma8232-art/daming-skillgain.git
+cd daming-skillgain
+pip install -r requirements.txt
+python3 -m evaluator.cli simple
+```
+
+Follow the prompts to choose a Skill, task, test models, and judges. Open the generated `report.html` when the run finishes.
 
 License: [GPL-3.0](LICENSE)
