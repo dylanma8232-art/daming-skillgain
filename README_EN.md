@@ -1,7 +1,5 @@
 **[中文](README.md)** | English
 
-[![Releases](https://img.shields.io/badge/⬇️_Download_Skill-Go_to_Releases-2ea44f?style=for-the-badge)](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
-
 # Daming Skill Gain Evaluation
 
 You have written several Skills, but cannot tell which ones actually help. A Skill may help one model and get in another's way. After an edit, it is just as hard to know whether the change improved the work or made it worse.
@@ -65,7 +63,7 @@ The summary gives the verdict; per-model results and side-by-side deliverables s
 
 Get the latest Skill package from the Releases page:
 
-[![Releases](https://img.shields.io/badge/⬇️_Go_to_Releases-Download_latest-2ea44f?style=for-the-badge)](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
+[Go to Releases to download the latest version →](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
 
 ```bash
 unzip daming-skillgain-v*.zip
