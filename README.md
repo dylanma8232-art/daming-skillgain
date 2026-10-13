@@ -1,5 +1,7 @@
 **[English](README_EN.md)** | 中文
 
+[![Releases](https://img.shields.io/badge/⬇️_下载_Skill-前往_Releases-2ea44f?style=for-the-badge)](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
+
 # 大明 Skill 增益测评
 
 写了几个 Skill，却说不清它们到底有没有帮上忙？同一个 Skill 换个模型可能从助力变成干扰；改完一版，也很难凭感觉判断结果究竟变好了还是变差了。
@@ -32,14 +34,12 @@
 
 ## 下载
 
-**直接下载可用 Skill 包**（推荐给只想用、不改代码的人）：
+请到 Releases 页面下载最新的 Skill 包：
 
-[**⬇️ 下载 daming-skillgain v1.0**](https://github.com/dylanma8232-art/daming-skillgain/releases/download/v1.0/daming-skillgain-v1.0.zip)（纯 Skill 包：`SKILL.md` + `references/` + `evaluator/` + `requirements.txt`）
-
-所有版本见 [Releases](https://github.com/dylanma8232-art/daming-skillgain/releases)。
+[![Releases](https://img.shields.io/badge/⬇️_前往_Releases-下载最新版-2ea44f?style=for-the-badge)](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
 
 ```bash
-unzip daming-skillgain-v1.0.zip
+unzip daming-skillgain-v*.zip
 cd daming-skillgain
 pip install -r requirements.txt
 python3 -m evaluator.cli simple
