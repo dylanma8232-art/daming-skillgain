@@ -96,7 +96,7 @@ def test_notice_text(monkeypatch):
 def test_no_new_version(monkeypatch):
     _mock_urlopen(monkeypatch, _payload("0.9.0"))
     assert check_for_update("1.0", now=1000.0) is None
-    _mock_urlopen(monkeypatch, _payload("7.0.1"))
+    _mock_urlopen(monkeypatch, _payload("1.1"))
     assert check_for_update("1.0", now=1000.0) is None
 
 
