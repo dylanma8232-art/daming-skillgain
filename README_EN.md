@@ -30,9 +30,24 @@ Apply deterministic checks; judges compare actual deliverables anonymously
 Review verdicts, side-by-side outputs, and run evidence before release
 ```
 
-## Get started in 30 seconds (after installing dependencies)
+## Download
 
-Requires Python 3 and the project dependencies. The tool under test must also run on your machine. Clone the repository, install dependencies, and start the guided evaluation:
+**Download the ready-to-use Skill package** (for people who just want to use it, not modify it):
+
+[**⬇️ Download daming-skillgain v1.0**](https://github.com/dylanma8232-art/daming-skillgain/releases/download/v1.0/daming-skillgain-v1.0.zip) (pure Skill package: `SKILL.md` + `references/` + `evaluator/` + `requirements.txt`)
+
+All versions: [Releases](https://github.com/dylanma8232-art/daming-skillgain/releases).
+
+```bash
+unzip daming-skillgain-v1.0.zip
+cd daming-skillgain
+pip install -r requirements.txt
+python3 -m evaluator.cli simple
+```
+
+## Get started in 30 seconds (from source)
+
+Requires Python 3 and the project dependencies. The tool under test must also run on your machine. You can also clone the repository, install dependencies, and start the guided evaluation:
 
 ```bash
 git clone https://github.com/dylanma8232-art/daming-skillgain.git
