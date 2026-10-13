@@ -1,4 +1,4 @@
-# daming-skillgain - 标准化使用指南（v7.0.0）
+# daming-skillgain - 标准化使用指南（v1.0）
 
 ## 快速开始
 

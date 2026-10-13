@@ -7,8 +7,8 @@
 - owner/repo 未定（用户建仓前）时默认 'dylanma8232-art/daming-skillgain'（已建仓），
   可通过环境变量 DAMING_SKILLGAIN_REPO 或配置项覆盖；建仓后改这一处即可。
 
-公开口径：对外宣传版本固定为 PUBLIC_VERSION = "1.0"（README 徽章同口径），
-内部 __version__ 7.0.1 仅用于工程对账，不写进用户提示。
+公开口径：对外版本统一为 PUBLIC_VERSION = "1.0"（README 徽章同口径），
+内部 __version__ 与之保持一致。
 """
 
 from __future__ import annotations
@@ -187,7 +187,7 @@ def maybe_check_update(current_version: str | None = None, force: bool = False) 
     """同步版检查入口：返回提示行文本（无更新 / 失败时为 None）。供 update-check 子命令与测试用。
 
     默认以 PUBLIC_VERSION（1.0，对外发布口径）参与比对：GitHub release tag
-    跟随对外版本号（v1.0, v1.1, ...），内部 __version__ 7.0.x 仅工程对账，不参与比对。
+    跟随版本号（v1.0, v1.1, ...），内部 __version__ 与之保持一致。
     """
     if current_version is None:
         current_version = PUBLIC_VERSION

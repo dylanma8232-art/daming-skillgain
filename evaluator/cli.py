@@ -30,7 +30,7 @@ from .task_generator import generate_task_prompt
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="daming-skillgain v7.0.1 - Skill 评测 CLI（想快速上手，请用 simple 子命令）"
+        description="daming-skillgain v1.0 - Skill 评测 CLI（想快速上手，请用 simple 子命令）"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

@@ -16,7 +16,7 @@ from .executors.agent import AgentExecutor
 from .model_discovery import ModelDiscovery, interactive_setup
 
 # 版本
-__version__ = "7.0.1"
+__version__ = "1.0"
 
 # 快捷访问
 __all__ = [
