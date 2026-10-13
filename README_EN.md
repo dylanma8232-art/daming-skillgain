@@ -1,5 +1,7 @@
 **[中文](README.md)** | English
 
+[![Releases](https://img.shields.io/badge/⬇️_Download_Skill-Go_to_Releases-2ea44f?style=for-the-badge)](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
+
 # Daming Skill Gain Evaluation
 
 You have written several Skills, but cannot tell which ones actually help. A Skill may help one model and get in another's way. After an edit, it is just as hard to know whether the change improved the work or made it worse.
@@ -32,14 +34,12 @@ Review verdicts, side-by-side outputs, and run evidence before release
 
 ## Download
 
-**Download the ready-to-use Skill package** (for people who just want to use it, not modify it):
+Get the latest Skill package from the Releases page:
 
-[**⬇️ Download daming-skillgain v1.0**](https://github.com/dylanma8232-art/daming-skillgain/releases/download/v1.0/daming-skillgain-v1.0.zip) (pure Skill package: `SKILL.md` + `references/` + `evaluator/` + `requirements.txt`)
-
-All versions: [Releases](https://github.com/dylanma8232-art/daming-skillgain/releases).
+[![Releases](https://img.shields.io/badge/⬇️_Go_to_Releases-Download_latest-2ea44f?style=for-the-badge)](https://github.com/dylanma8232-art/daming-skillgain/releases/latest)
 
 ```bash
-unzip daming-skillgain-v1.0.zip
+unzip daming-skillgain-v*.zip
 cd daming-skillgain
 pip install -r requirements.txt
 python3 -m evaluator.cli simple
