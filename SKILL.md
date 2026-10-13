@@ -44,6 +44,7 @@ python3 -m evaluator.cli simple
 ## 参考文件（按需读取，不要一次全读）
 
 - [references/workflow.md](references/workflow.md) — 分步命令、参数、准备阶段硬规则、盲评与总结流程
+- [references/usage.md](references/usage.md) — Python SDK / REST API / MCP Server 接入、宿主能力边界、执行器类型
 - [references/hosts.md](references/hosts.md) — 接入被测 AI 工具的三种方式、工具矩阵、脚本契约模板
 - [references/resources.md](references/resources.md) — 资源识别规则与预校验
 - [references/report-and-contract.md](references/report-and-contract.md) — HTML 报告结构、评测契约与评测原则
