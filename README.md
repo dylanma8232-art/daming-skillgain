@@ -30,9 +30,24 @@
 查看结论、并排产出和运行证据，再决定发布或开关
 ```
 
-## 30 秒上手（依赖安装完成后）
+## 下载
 
-需要 Python 3 和项目依赖；被测工具也需能在本机运行。克隆仓库、安装依赖并启动交互式测评：
+**直接下载可用 Skill 包**（推荐给只想用、不改代码的人）：
+
+[**⬇️ 下载 daming-skillgain v1.0**](https://github.com/dylanma8232-art/daming-skillgain/releases/download/v1.0/daming-skillgain-v1.0.zip)（纯 Skill 包：`SKILL.md` + `references/` + `evaluator/` + `requirements.txt`）
+
+所有版本见 [Releases](https://github.com/dylanma8232-art/daming-skillgain/releases)。
+
+```bash
+unzip daming-skillgain-v1.0.zip
+cd daming-skillgain
+pip install -r requirements.txt
+python3 -m evaluator.cli simple
+```
+
+## 30 秒上手（从源码）
+
+需要 Python 3 和项目依赖；被测工具也需能在本机运行。也可以克隆仓库、安装依赖并启动交互式测评：
 
 ```bash
 git clone https://github.com/dylanma8232-art/daming-skillgain.git
