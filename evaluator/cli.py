@@ -7,7 +7,7 @@ import re
 import sys
 from typing import Any
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 
 from .engine import (
     EvaluationEngine,
@@ -40,94 +40,235 @@ def build_parser() -> argparse.ArgumentParser:
         help="【推荐新手】问答式引导，只答 4 个问题自动跑完评测",
         description="问答式引导评测：依次问被测 skill、任务、模型、评委，其余参数用默认值，自动串起 plan→run→evaluate→report。",
     )
-    simple_parser.add_argument("--skill-path", default="", help="被测 skill 目录（可提前给，给了就跳过提问）")
-    simple_parser.add_argument("--task-prompt", default="", help="让 skill 干什么活（可提前给，给了就跳过提问）")
-    simple_parser.add_argument("--models", default="", help="用哪些模型测，逗号分隔（可提前给，给了就跳过提问）")
-    simple_parser.add_argument("--voting-models", default="", help="评委模型，逗号分隔（可提前给，给了就跳过提问）")
-    simple_parser.add_argument("--dry-run", action="store_true", help="演练模式：不真正启动模型，走一遍完整流程")
-    simple_parser.add_argument("--auto", action="store_true", help="不停盘确认，一口气跑到底（默认每个阶段回车确认）")
+    simple_parser.add_argument(
+        "--skill-path", default="", help="被测 skill 目录（可提前给，给了就跳过提问）"
+    )
+    simple_parser.add_argument(
+        "--task-prompt",
+        default="",
+        help="让 skill 干什么活（可提前给，给了就跳过提问）",
+    )
+    simple_parser.add_argument(
+        "--models",
+        default="",
+        help="用哪些模型测，逗号分隔（可提前给，给了就跳过提问）",
+    )
+    simple_parser.add_argument(
+        "--voting-models",
+        default="",
+        help="评委模型，逗号分隔（可提前给，给了就跳过提问）",
+    )
+    simple_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="演练模式：不真正启动模型，走一遍完整流程",
+    )
+    simple_parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="不停盘确认，一口气跑到底（默认每个阶段回车确认）",
+    )
 
     update_parser = subparsers.add_parser(
         "update-check",
         help="检查 GitHub 上是否有新版本（平时 CLI 启动会自动后台检查，无需手动跑）",
     )
 
-    plan_parser = subparsers.add_parser("plan", help="生成评测计划（高级；新手请用 simple）")
-    plan_parser.add_argument("--mode", choices=["explicit", "blind", "both"], default="explicit",
-        help="怎么评：先匿名让评委打分再复现（默认 explicit，不用管）")
-    plan_parser.add_argument("--init", action="store_true", help="输出需要收集的字段信息（agent 用 question 展示）")
-    plan_parser.add_argument("--skill-path", required=True, help="测哪个 skill：skill 目录路径（必填）")
-    plan_parser.add_argument("--skill-name", help="skill 名字（不填会自动从 SKILL.md 里读）")
-    plan_parser.add_argument("--task-prompt", help="让它干什么活：测试任务描述（必填，除非你明确让工具自动编一个）")
-    plan_parser.add_argument("--allow-generated-task-prompt", action="store_true",
-        help="我没想好任务，让工具根据 skill 自动编一个")
+    plan_parser = subparsers.add_parser(
+        "plan", help="生成评测计划（高级；新手请用 simple）"
+    )
+    plan_parser.add_argument(
+        "--mode",
+        choices=["explicit", "blind", "both"],
+        default="explicit",
+        help="怎么评：先匿名让评委打分再复现（默认 explicit，不用管）",
+    )
+    plan_parser.add_argument(
+        "--init",
+        action="store_true",
+        help="输出需要收集的字段信息（agent 用 question 展示）",
+    )
+    plan_parser.add_argument(
+        "--skill-path", required=True, help="测哪个 skill：skill 目录路径（必填）"
+    )
+    plan_parser.add_argument(
+        "--skill-name", help="skill 名字（不填会自动从 SKILL.md 里读）"
+    )
+    plan_parser.add_argument(
+        "--task-prompt",
+        help="让它干什么活：测试任务描述（必填，除非你明确让工具自动编一个）",
+    )
+    plan_parser.add_argument(
+        "--allow-generated-task-prompt",
+        action="store_true",
+        help="我没想好任务，让工具根据 skill 自动编一个",
+    )
     plan_parser.add_argument("--input-files", help="skill 干活需要的输入文件，逗号分隔")
     plan_parser.add_argument("--models", help="用哪些模型测，逗号分隔")
-    plan_parser.add_argument("--voting-models", help="请谁来当评委（打分模型），逗号分隔，必填")
+    plan_parser.add_argument(
+        "--voting-models", help="请谁来当评委（打分模型），逗号分隔，必填"
+    )
     plan_parser.add_argument("--summary-model", help="谁来写总结，默认用第一个评委")
-    plan_parser.add_argument("--resources", help="收集到的资源列表 (JSON 格式: [{\"description\": \"...\", \"value\": \"...\"}])")
-    plan_parser.add_argument("--generate", action="store_true", help="根据传入参数生成评测计划")
-    plan_parser.add_argument("--parallelism", type=int, default=None, help="同时跑几个实验，默认自动（约 5），不用管")
-    plan_parser.add_argument("--execution-mode", choices=["cli-attach", "cli", "api"], default="cli-attach",
-        help="怎么调模型：默认 cli-attach 自动连本地服务，不用管")
-    plan_parser.add_argument("--skip-connectivity-test", action="store_true",
-        help="跳过开跑前的模型连通检查（不推荐）")
-    plan_parser.add_argument("--repetitions", type=int, default=None,
-        help="同一个实验重复跑几遍，默认 3 遍（跑得多结论更稳）")
-    plan_parser.add_argument("--host", default=None,
-        help="用哪个 Agent 工具跑实验 (opencode / claude-code / codex / script 等)，默认 opencode")
-    plan_parser.add_argument("--host-config", default=None,
-        help="宿主专属配置 (JSON，如 script 宿主: '{\"script\": \"/path/to/host.sh\"}')")
+    plan_parser.add_argument(
+        "--resources",
+        help='收集到的资源列表 (JSON 格式: [{"description": "...", "value": "..."}])',
+    )
+    plan_parser.add_argument(
+        "--generate", action="store_true", help="根据传入参数生成评测计划"
+    )
+    plan_parser.add_argument(
+        "--parallelism",
+        type=int,
+        default=None,
+        help="同时跑几个实验，默认自动（约 5），不用管",
+    )
+    plan_parser.add_argument(
+        "--execution-mode",
+        choices=["cli-attach", "cli", "api"],
+        default="cli-attach",
+        help="怎么调模型：默认 cli-attach 自动连本地服务，不用管",
+    )
+    plan_parser.add_argument(
+        "--skip-connectivity-test",
+        action="store_true",
+        help="跳过开跑前的模型连通检查（不推荐）",
+    )
+    plan_parser.add_argument(
+        "--repetitions",
+        type=int,
+        default=None,
+        help="同一个实验重复跑几遍，默认 3 遍（跑得多结论更稳）",
+    )
+    plan_parser.add_argument(
+        "--host",
+        default=None,
+        help="用哪个 Agent 工具跑实验 (opencode / claude-code / codex / script 等)，默认 opencode",
+    )
+    plan_parser.add_argument(
+        "--host-config",
+        default=None,
+        help='宿主专属配置 (JSON，如 script 宿主: \'{"script": "/path/to/host.sh"}\')',
+    )
 
-    run_parser = subparsers.add_parser("run", help="执行已有评测计划（高级；新手请用 simple）")
-    run_parser.add_argument("--plan-dir", required=True, help="plan 生成的 run 目录路径")
-    run_parser.add_argument("--dry-run", action="store_true", help="演练模式：不真正启动模型")
-    run_parser.add_argument("--execution-mode", choices=["cli-attach", "cli", "api"], default=None,
-        help="怎么调模型：默认沿用计划里的设置，不用管")
-    run_parser.add_argument("--parallelism", type=int, default=None,
-        help="同时跑几个实验，默认 5，不用管")
-    run_parser.add_argument("--review-parallelism", type=int, default=None,
-        help="评委同时打几份分，默认 4-6，不用管")
-    run_parser.add_argument("--progress-interval", type=float, default=5.0,
-        help="多久汇报一次进度（秒），默认 5，不用管")
-    run_parser.add_argument("--host", default=None,
-        help="用哪个 Agent 工具跑实验，默认沿用计划里的设置")
-    run_parser.add_argument("--host-config", default=None,
-        help="宿主专属配置 (JSON，如 script 宿主: '{\"script\": \"/path/to/host.sh\"}')")
+    run_parser = subparsers.add_parser(
+        "run", help="执行已有评测计划（高级；新手请用 simple）"
+    )
+    run_parser.add_argument(
+        "--plan-dir", required=True, help="plan 生成的 run 目录路径"
+    )
+    run_parser.add_argument(
+        "--dry-run", action="store_true", help="演练模式：不真正启动模型"
+    )
+    run_parser.add_argument(
+        "--execution-mode",
+        choices=["cli-attach", "cli", "api"],
+        default=None,
+        help="怎么调模型：默认沿用计划里的设置，不用管",
+    )
+    run_parser.add_argument(
+        "--parallelism", type=int, default=None, help="同时跑几个实验，默认 5，不用管"
+    )
+    run_parser.add_argument(
+        "--review-parallelism",
+        type=int,
+        default=None,
+        help="评委同时打几份分，默认 4-6，不用管",
+    )
+    run_parser.add_argument(
+        "--progress-interval",
+        type=float,
+        default=5.0,
+        help="多久汇报一次进度（秒），默认 5，不用管",
+    )
+    run_parser.add_argument(
+        "--host", default=None, help="用哪个 Agent 工具跑实验，默认沿用计划里的设置"
+    )
+    run_parser.add_argument(
+        "--host-config",
+        default=None,
+        help='宿主专属配置 (JSON，如 script 宿主: \'{"script": "/path/to/host.sh"}\')',
+    )
 
-    analyze_parser = subparsers.add_parser("analyze", help="重建已有 run 目录的汇总分析")
+    analyze_parser = subparsers.add_parser(
+        "analyze", help="重建已有 run 目录的汇总分析"
+    )
     analyze_parser.add_argument("--run-dir", required=True, help="已有 run 目录路径")
 
-    report_parser = subparsers.add_parser("report", help="为已有 run 目录生成静态 HTML 对比报告")
+    report_parser = subparsers.add_parser(
+        "report", help="为已有 run 目录生成静态 HTML 对比报告"
+    )
     report_parser.add_argument("--run-dir", required=True, help="已有 run 目录路径")
 
     eval_parser = subparsers.add_parser("evaluate", help="对已有评测结果重跑评委打分")
     eval_parser.add_argument("--run-dir", required=True, help="评测 run 目录路径")
-    eval_parser.add_argument("--voting-models", help="请谁来当评委（打分模型），逗号分隔")
-    eval_parser.add_argument("--review-parallelism", type=int, default=None,
-        help="评委同时打几份分，默认 4-6，不用管")
+    eval_parser.add_argument(
+        "--voting-models", help="请谁来当评委（打分模型），逗号分隔"
+    )
+    eval_parser.add_argument(
+        "--review-parallelism",
+        type=int,
+        default=None,
+        help="评委同时打几份分，默认 4-6，不用管",
+    )
 
-    pipeline_parser = subparsers.add_parser("pipeline", help="端到端评测（高级；4 个阶段停盘确认，新手请用 simple）")
-    pipeline_parser.add_argument("--skill-path", required=True, help="测哪个 skill：skill 目录路径")
-    pipeline_parser.add_argument("--skill-name", help="skill 名字（不填会自动从 SKILL.md 里读）")
+    pipeline_parser = subparsers.add_parser(
+        "pipeline", help="端到端评测（高级；4 个阶段停盘确认，新手请用 simple）"
+    )
+    pipeline_parser.add_argument(
+        "--skill-path", required=True, help="测哪个 skill：skill 目录路径"
+    )
+    pipeline_parser.add_argument(
+        "--skill-name", help="skill 名字（不填会自动从 SKILL.md 里读）"
+    )
     pipeline_parser.add_argument("--task-prompt", help="让它干什么活：测试任务描述")
-    pipeline_parser.add_argument("--allow-generated-task-prompt", action="store_true", help="我没想好任务，让工具自动编一个")
-    pipeline_parser.add_argument("--input-files", help="skill 干活需要的输入文件，逗号分隔")
+    pipeline_parser.add_argument(
+        "--allow-generated-task-prompt",
+        action="store_true",
+        help="我没想好任务，让工具自动编一个",
+    )
+    pipeline_parser.add_argument(
+        "--input-files", help="skill 干活需要的输入文件，逗号分隔"
+    )
     pipeline_parser.add_argument("--models", help="用哪些模型测，逗号分隔")
-    pipeline_parser.add_argument("--voting-models", help="请谁来当评委（打分模型），逗号分隔")
+    pipeline_parser.add_argument(
+        "--voting-models", help="请谁来当评委（打分模型），逗号分隔"
+    )
     pipeline_parser.add_argument("--summary-model", help="谁来写总结，默认用第一个评委")
     pipeline_parser.add_argument("--resources", help="资源 JSON")
-    pipeline_parser.add_argument("--execution-mode", choices=["cli-attach", "cli", "api"], default="cli-attach")
-    pipeline_parser.add_argument("--host", default=None, help="用哪个 Agent 工具跑实验 (opencode / claude-code / codex / script 等)")
-    pipeline_parser.add_argument("--host-config", default=None, help="宿主专属配置 (JSON，如 script 宿主: '{\"script\": \"/path/to/host.sh\"}')")
-    pipeline_parser.add_argument("--parallelism", type=int, default=None, help="同时跑几个实验，默认自动，不用管")
-    pipeline_parser.add_argument("--dry-run", action="store_true", help="演练模式：不真正启动模型")
-    pipeline_parser.add_argument("--auto", action="store_true", help="不停盘确认，一口气跑到底（默认每个阶段回车确认）")
-    pipeline_parser.add_argument("--repetitions", type=int, default=None,
-        help="同一个实验重复跑几遍，默认 3 遍")
+    pipeline_parser.add_argument(
+        "--execution-mode", choices=["cli-attach", "cli", "api"], default="cli-attach"
+    )
+    pipeline_parser.add_argument(
+        "--host",
+        default=None,
+        help="用哪个 Agent 工具跑实验 (opencode / claude-code / codex / script 等)",
+    )
+    pipeline_parser.add_argument(
+        "--host-config",
+        default=None,
+        help='宿主专属配置 (JSON，如 script 宿主: \'{"script": "/path/to/host.sh"}\')',
+    )
+    pipeline_parser.add_argument(
+        "--parallelism", type=int, default=None, help="同时跑几个实验，默认自动，不用管"
+    )
+    pipeline_parser.add_argument(
+        "--dry-run", action="store_true", help="演练模式：不真正启动模型"
+    )
+    pipeline_parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="不停盘确认，一口气跑到底（默认每个阶段回车确认）",
+    )
+    pipeline_parser.add_argument(
+        "--repetitions", type=int, default=None, help="同一个实验重复跑几遍，默认 3 遍"
+    )
 
-    verify_parser = subparsers.add_parser("verify-snapshot", help="复验快照文件（同一份产出重查结果是否一致）")
-    verify_parser.add_argument("--snapshot", help="快照文件路径 (assertions_snapshot.json)")
+    verify_parser = subparsers.add_parser(
+        "verify-snapshot", help="复验快照文件（同一份产出重查结果是否一致）"
+    )
+    verify_parser.add_argument(
+        "--snapshot", help="快照文件路径 (assertions_snapshot.json)"
+    )
     verify_parser.add_argument("--run-dir", help="包含快照文件的运行目录")
 
     return parser
@@ -171,14 +312,41 @@ def cmd_plan_init(skill_path: str) -> dict:
     return {
         "action": "collect_evaluation_config",
         "guide": {
-            "step1": {"action": "ask_skill_path", "description": "让用户提供被评测 skill 的目录路径"},
-            "step2": {"action": "analyze_skill", "description": "读取 SKILL.md，分析 skill 能力、类型、所需资源"},
-            "step3": {"action": "handle_resources", "description": "遍历 required_resources：先问用户有没有；没有则判断 AI 能否生成；不能生成则必须用户提供"},
-            "step4": {"action": "handle_task_prompt", "description": "必须先询问用户本次评测需求；只有用户明确授权 evaluator 自行生成时，才根据 skill 能力自动生成"},
-            "step5": {"action": "select_models", "description": "让用户选择参与评测的模型（可多选）", "options": detected},
-            "step6": {"action": "select_voting_models", "description": "盲评为必选流程，让用户选择评委模型（可多选）", "options": detected},
-            "step7": {"action": "select_summary_model", "description": "选择一个总结模型，基于评委评价生成结构化洞察结论", "options": detected},
-            "step8": {"action": "generate_plan", "description": "调用 plan --generate 提交所有参数"},
+            "step1": {
+                "action": "ask_skill_path",
+                "description": "让用户提供被评测 skill 的目录路径",
+            },
+            "step2": {
+                "action": "analyze_skill",
+                "description": "读取 SKILL.md，分析 skill 能力、类型、所需资源",
+            },
+            "step3": {
+                "action": "handle_resources",
+                "description": "遍历 required_resources：先问用户有没有；没有则判断 AI 能否生成；不能生成则必须用户提供",
+            },
+            "step4": {
+                "action": "handle_task_prompt",
+                "description": "必须先询问用户本次评测需求；只有用户明确授权 evaluator 自行生成时，才根据 skill 能力自动生成",
+            },
+            "step5": {
+                "action": "select_models",
+                "description": "让用户选择参与评测的模型（可多选）",
+                "options": detected,
+            },
+            "step6": {
+                "action": "select_voting_models",
+                "description": "盲评为必选流程，让用户选择评委模型（可多选）",
+                "options": detected,
+            },
+            "step7": {
+                "action": "select_summary_model",
+                "description": "选择一个总结模型，基于评委评价生成结构化洞察结论",
+                "options": detected,
+            },
+            "step8": {
+                "action": "generate_plan",
+                "description": "调用 plan --generate 提交所有参数",
+            },
         },
         "available_models": detected,
         "required_resources": resources,
@@ -197,21 +365,25 @@ def _extract_skill_name_from_path(skill_path: str) -> str:
     skill_md = Path(skill_path) / "SKILL.md"
     if skill_md.exists():
         content = skill_md.read_text(encoding="utf-8")
-        match = re.search(r'^name:\s*(.+)$', content, re.MULTILINE)
+        match = re.search(r"^name:\s*(.+)$", content, re.MULTILINE)
         if match:
             return match.group(1).strip()
     return Path(skill_path).name
 
 
 def write_json(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def _resource_label(resource: SkillResource) -> str:
     return resource.name or resource.type or resource.description[:20]
 
 
-def _find_matching_resource_entry(resource: SkillResource, entries: list[dict], index: int) -> dict:
+def _find_matching_resource_entry(
+    resource: SkillResource, entries: list[dict], index: int
+) -> dict:
     if index < len(entries) and isinstance(entries[index], dict):
         entry = entries[index]
         if entry.get("type") == resource.type or entry.get("name") == resource.name:
@@ -222,7 +394,10 @@ def _find_matching_resource_entry(resource: SkillResource, entries: list[dict], 
             continue
         if entry.get("name") == resource.name:
             return entry
-        if entry.get("type") == resource.type and entry.get("description") == resource.description:
+        if (
+            entry.get("type") == resource.type
+            and entry.get("description") == resource.description
+        ):
             return entry
         if entry.get("description") == resource.description:
             return entry
@@ -264,7 +439,12 @@ def _should_generate_test_data(
         if _extract_existing_paths(value, cwd):
             continue
         allow_auto_generation = bool(provided.get("allow_auto_generation"))
-        if isinstance(value, str) and value.strip().lower() in {"auto", "generate", "生成", "ai生成"}:
+        if isinstance(value, str) and value.strip().lower() in {
+            "auto",
+            "generate",
+            "生成",
+            "ai生成",
+        }:
             allow_auto_generation = True
         if not allow_auto_generation:
             continue
@@ -272,7 +452,9 @@ def _should_generate_test_data(
     return False
 
 
-def _resource_allows_auto_generation(resource: SkillResource, entry: dict, cwd: Path) -> bool:
+def _resource_allows_auto_generation(
+    resource: SkillResource, entry: dict, cwd: Path
+) -> bool:
     if resource.type != "file" or not resource.supports_auto_generation:
         return False
     value = entry.get("value", "")
@@ -280,7 +462,12 @@ def _resource_allows_auto_generation(resource: SkillResource, entry: dict, cwd: 
         return False
     if bool(entry.get("allow_auto_generation")):
         return True
-    if isinstance(value, str) and value.strip().lower() in {"auto", "generate", "生成", "ai生成"}:
+    if isinstance(value, str) and value.strip().lower() in {
+        "auto",
+        "generate",
+        "生成",
+        "ai生成",
+    }:
         return True
     return False
 
@@ -305,14 +492,16 @@ def _build_plan_questions(
     questions: list[dict[str, Any]] = []
 
     if not task_prompt.strip() and not allow_generated_task:
-        questions.append({
-            "id": "task_prompt",
-            "type": "text",
-            "required": True,
-            "question": "这次想让这个 skill 干什么活？一句话描述就行。",
-            "why": "所有模型要在同一个任务下比拼，不能由评测器替你编任务；你要是没想好，也可以明确授权我根据 skill 自动编一个。",
-            "example": "请分析销售 CSV，找出销售额趋势、异常订单和可执行建议，并输出分析报告。",
-        })
+        questions.append(
+            {
+                "id": "task_prompt",
+                "type": "text",
+                "required": True,
+                "question": "这次想让这个 skill 干什么活？一句话描述就行。",
+                "why": "所有模型要在同一个任务下比拼，不能由评测器替你编任务；你要是没想好，也可以明确授权我根据 skill 自动编一个。",
+                "example": "请分析销售 CSV，找出销售额趋势、异常订单和可执行建议，并输出分析报告。",
+            }
+        )
 
     for index, resource in enumerate(analysis.required_resources):
         entry = _find_matching_resource_entry(resource, resource_entries, index)
@@ -342,16 +531,18 @@ def _build_plan_questions(
             continue
 
         if resource.blocking and not _has_resource_value(resource, entry, cwd):
-            questions.append({
-                "id": resource.name or f"resource_{index}",
-                "type": "secret" if resource.sensitivity == "high" else "text",
-                "required": True,
-                "resource_type": resource.type,
-                "question": f"这个 skill 干活需要「{resource.name or resource.type}」这类信息（账号、钥匙之类的只能你给，我不能编）。请提供一份测试用的。",
-                "why": resource.validation_hint or resource.description,
-                "can_auto_generate": False,
-                "example": resource.example,
-            })
+            questions.append(
+                {
+                    "id": resource.name or f"resource_{index}",
+                    "type": "secret" if resource.sensitivity == "high" else "text",
+                    "required": True,
+                    "resource_type": resource.type,
+                    "question": f"这个 skill 干活需要「{resource.name or resource.type}」这类信息（账号、钥匙之类的只能你给，我不能编）。请提供一份测试用的。",
+                    "why": resource.validation_hint or resource.description,
+                    "can_auto_generate": False,
+                    "example": resource.example,
+                }
+            )
 
     return questions
 
@@ -367,7 +558,9 @@ def _parse_host_config(raw: str | None) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def _task_generation_allowed(resources_json: str | None, allow_generated_task_prompt: bool) -> bool:
+def _task_generation_allowed(
+    resources_json: str | None, allow_generated_task_prompt: bool
+) -> bool:
     if allow_generated_task_prompt:
         return True
     if not resources_json:
@@ -384,12 +577,27 @@ def _task_generation_allowed(resources_json: str | None, allow_generated_task_pr
     )
 
 
-def _generated_data_files(generated_files: list[dict[str, str]]) -> list[dict[str, str]]:
-    data_suffixes = {".csv", ".tsv", ".xlsx", ".xls", ".json", ".xml", ".sql", ".db", ".sqlite", ".pdf", ".docx"}
+def _generated_data_files(
+    generated_files: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    data_suffixes = {
+        ".csv",
+        ".tsv",
+        ".xlsx",
+        ".xls",
+        ".json",
+        ".xml",
+        ".sql",
+        ".db",
+        ".sqlite",
+        ".pdf",
+        ".docx",
+    }
     return [
         item
         for item in generated_files
-        if item.get("type") != "task_description" and Path(item.get("path", "")).suffix.lower() in data_suffixes
+        if item.get("type") != "task_description"
+        and Path(item.get("path", "")).suffix.lower() in data_suffixes
     ]
 
 
@@ -453,16 +661,22 @@ def _build_preflight(
         normalized.append(item)
 
         if status == "missing" and (resource.blocking or resource.type == "file"):
-            blocking_issues.append(f"{_resource_label(resource)} 缺失：{resource.validation_hint or resource.description}")
+            blocking_issues.append(
+                f"{_resource_label(resource)} 缺失：{resource.validation_hint or resource.description}"
+            )
         elif status == "generated":
-            warnings.append(f"{_resource_label(resource)} 用的是生成的测试数据（不是真实数据），最终报告会标注。")
+            warnings.append(
+                f"{_resource_label(resource)} 用的是生成的测试数据（不是真实数据），最终报告会标注。"
+            )
         elif status == "defaulted":
             if resource.type == "file" and resource.supports_auto_generation:
                 warnings.append(
                     f"{_resource_label(resource)} 未提供真实文件，也未明确授权自动生成；评测将不附加该类测试数据。"
                 )
             else:
-                warnings.append(f"{_resource_label(resource)} 未提供真实信息，评测将使用默认假设，可信度会降低。")
+                warnings.append(
+                    f"{_resource_label(resource)} 未提供真实信息，评测将使用默认假设，可信度会降低。"
+                )
 
     validator_report = run_preflight_validators(normalized, cwd)
     for item, check in zip(normalized, validator_report["checks"]):
@@ -485,37 +699,64 @@ def _build_preflight(
         "resource_items": normalized,
         "validator_checks": validator_report["checks"],
         "validator_summary": validator_report["summary"],
-        "uses_synthetic_data": any(item["status"] == "generated" for item in normalized),
-        "uses_default_assumptions": any(item["status"] == "defaulted" for item in normalized),
+        "uses_synthetic_data": any(
+            item["status"] == "generated" for item in normalized
+        ),
+        "uses_default_assumptions": any(
+            item["status"] == "defaulted" for item in normalized
+        ),
     }
     return preflight, input_files
 
 
-def cmd_plan_generate(
-    skill_name: str,
-    skill_path: str,
-    task_prompt: str,
-    input_files: list[str],
-    models: list[str],
-    voting_models: list[str] | None = None,
-    summary_model: str | None = None,
-    resources_json: str | None = None,
-    parallelism: int | None = None,
-    execution_mode: str = "cli-attach",
-    skip_connectivity_test: bool = False,
-    allow_generated_task_prompt: bool = False,
-    repetitions: int | None = None,
-    host: str | None = None,
-    host_config: dict[str, Any] | None = None,
-) -> dict:
+@dataclass
+class PlanGenerateConfig:
+    skill_name: str
+    skill_path: str
+    task_prompt: str
+    input_files: list[str]
+    models: list[str]
+    voting_models: list[str] | None = None
+    summary_model: str | None = None
+    resources_json: str | None = None
+    parallelism: int | None = None
+    execution_mode: str = "cli-attach"
+    skip_connectivity_test: bool = False
+    allow_generated_task_prompt: bool = False
+    repetitions: int | None = None
+    host: str | None = None
+    host_config: dict[str, Any] | None = None
+
+
+def cmd_plan_generate(config: PlanGenerateConfig) -> dict:
+    skill_name = config.skill_name
+    skill_path = config.skill_path
+    task_prompt = config.task_prompt
+    input_files = config.input_files
+    models = config.models
+    voting_models = config.voting_models
+    summary_model = config.summary_model
+    resources_json = config.resources_json
+    parallelism = config.parallelism
+    execution_mode = config.execution_mode
+    skip_connectivity_test = config.skip_connectivity_test
+    allow_generated_task_prompt = config.allow_generated_task_prompt
+    repetitions = config.repetitions
+    host = config.host
+    host_config = config.host_config
+
     if not skill_path or not skill_path.strip():
         return {"error": "还没告诉我要测哪个 skill。请给我 skill 目录的路径。"}
     if not models:
         return {"error": "models 不能为空"}
     if not voting_models:
-        return {"error": "voting_models 不能为空，盲评是必选流程，请至少提供一个评委模型"}
+        return {
+            "error": "voting_models 不能为空，盲评是必选流程，请至少提供一个评委模型"
+        }
     if not summary_model:
-        return {"error": "summary_model 不能为空，总结模型负责基于评委评价生成结构化洞察结论"}
+        return {
+            "error": "summary_model 不能为空，总结模型负责基于评委评价生成结构化洞察结论"
+        }
 
     resolved_skill_path = Path(skill_path)
     if not resolved_skill_path.is_absolute():
@@ -549,7 +790,9 @@ def cmd_plan_generate(
         if not isinstance(resource_data, list):
             return {"error": "resources JSON 必须是数组"}
 
-    allow_generated_task = _task_generation_allowed(resources_json, allow_generated_task_prompt)
+    allow_generated_task = _task_generation_allowed(
+        resources_json, allow_generated_task_prompt
+    )
     questions = _build_plan_questions(
         skill_analysis,
         resource_data,
@@ -564,7 +807,9 @@ def cmd_plan_generate(
             "action": "ask_user",
             "message": "生成评测计划前必须补充用户输入。请先向用户确认评测需求和所需资源，不要静默默认生成。",
             "questions": questions,
-            "required_resources": [asdict(r) for r in skill_analysis.required_resources],
+            "required_resources": [
+                asdict(r) for r in skill_analysis.required_resources
+            ],
             "task_prompt_policy": {
                 "required": True,
                 "ask_user_first": True,
@@ -580,9 +825,15 @@ def cmd_plan_generate(
     # 模型连通性测试：确保所有选中的模型（参与模型 + 评委模型 + 总结模型）均可正常调用。
     # 资源 gate 通过后再测，避免在缺需求/缺数据时浪费调用。
     if not skip_connectivity_test:
-        all_test_models = list(set(models + voting_models + ([summary_model] if summary_model else [])))
-        print(f"\n🔗 开始模型连通性测试 ({len(all_test_models)} 个模型, mode={execution_mode}, host={host or '默认'})...")
-        connectivity = test_model_connectivity(all_test_models, execution_mode=execution_mode, timeout=60, host=host)
+        all_test_models = list(
+            set(models + voting_models + ([summary_model] if summary_model else []))
+        )
+        print(
+            f"\n🔗 开始模型连通性测试 ({len(all_test_models)} 个模型, mode={execution_mode}, host={host or '默认'})..."
+        )
+        connectivity = test_model_connectivity(
+            all_test_models, execution_mode=execution_mode, timeout=60, host=host
+        )
         print_connectivity_report(connectivity)
 
         if not connectivity["all_ok"]:
@@ -599,7 +850,9 @@ def cmd_plan_generate(
     generated_dir.mkdir(parents=True, exist_ok=True)
     generated_files: list[dict[str, str]] = []
     readme_path = generated_dir / "README.md"
-    should_generate_data = _should_generate_test_data(skill_analysis, resource_data, config_dir, resolved_input_files)
+    should_generate_data = _should_generate_test_data(
+        skill_analysis, resource_data, config_dir, resolved_input_files
+    )
     if should_generate_data:
         generated_files, readme_path = generate_test_data(skill_analysis, generated_dir)
         if not _generated_data_files(generated_files):
@@ -626,7 +879,11 @@ def cmd_plan_generate(
 
     all_input_files: list[str] = []
     seen_inputs = set()
-    for path in resolved_input_files + resource_input_files + [f["path"] for f in generated_files]:
+    for path in (
+        resolved_input_files
+        + resource_input_files
+        + [f["path"] for f in generated_files]
+    ):
         if path in seen_inputs:
             continue
         seen_inputs.add(path)
@@ -635,20 +892,26 @@ def cmd_plan_generate(
     if preflight["resource_items"]:
         config_file = generated_dir / "skill_resources.json"
         config_file.write_text(
-            json.dumps({"resources": preflight["resource_items"]}, ensure_ascii=False, indent=2),
+            json.dumps(
+                {"resources": preflight["resource_items"]}, ensure_ascii=False, indent=2
+            ),
             encoding="utf-8",
         )
         all_input_files.append(str(config_file))
 
     preflight_path = generated_dir / "preflight.json"
-    preflight_path.write_text(json.dumps(preflight, ensure_ascii=False, indent=2), encoding="utf-8")
+    preflight_path.write_text(
+        json.dumps(preflight, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     all_input_files.append(str(preflight_path))
 
     # 评测合同和评分规范只保存在评测器运行目录中，不复制到模型工作区
     # 避免模型读到评测标准后"表演"出期望行为
 
     if not task_prompt:
-        task_prompt = generate_task_prompt(skill_analysis, generated_files, resources_json=resources_json)
+        task_prompt = generate_task_prompt(
+            skill_analysis, generated_files, resources_json=resources_json
+        )
 
     config = EvaluationConfig(
         evaluation_name=f"{safe_name}-evaluation",
@@ -659,13 +922,16 @@ def cmd_plan_generate(
         models=models,
         blind_review_models=voting_models,
         summary_model=summary_model or "",
-        runners=[RunnerConfig(
-            name=host or "opencode",
-            enabled=True,
-            # P2: command_template 保留为人类可读的展示形态；实际执行经统一宿主调度层分发
-            command_template=(host or "opencode") + " run --format json --model {model} -- {prompt_arg}",
-            env={},
-        )],
+        runners=[
+            RunnerConfig(
+                name=host or "opencode",
+                enabled=True,
+                # P2: command_template 保留为人类可读的展示形态；实际执行经统一宿主调度层分发
+                command_template=(host or "opencode")
+                + " run --format json --model {model} -- {prompt_arg}",
+                env={},
+            )
+        ],
         input_files=all_input_files,
         requires_test_data=False,
         attach_input_files=True,
@@ -685,7 +951,10 @@ def cmd_plan_generate(
     engine = EvaluationEngine(config, config_dir / "eval-config.json")
 
     analysis_path = generated_dir / "skill_analysis.json"
-    analysis_path.write_text(json.dumps(skill_analysis.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+    analysis_path.write_text(
+        json.dumps(skill_analysis.to_dict(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     result = engine.plan_only()
 
@@ -693,7 +962,10 @@ def cmd_plan_generate(
 
     # 评测合同写入评测器运行目录（模型不可见）
     contract_path = run_dir / "evaluation_contract.json"
-    contract_path.write_text(json.dumps(skill_analysis.evaluation_contract, ensure_ascii=False, indent=2), encoding="utf-8")
+    contract_path.write_text(
+        json.dumps(skill_analysis.evaluation_contract, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     result["blind_review"] = {"voting_models": voting_models or []}
 
     result["skill_analysis"] = {
@@ -760,30 +1032,45 @@ def cmd_simple(args: argparse.Namespace) -> dict:
     else:
         print(f"\n1/4 测哪个 skill？已指定：{skill_path}")
     if not skill_path:
-        return {"error": "needs_user_input", "message": "没拿到 skill 目录路径，评测没法开始。请重新运行并提供 skill 目录。"}
+        return {
+            "error": "needs_user_input",
+            "message": "没拿到 skill 目录路径，评测没法开始。请重新运行并提供 skill 目录。",
+        }
 
     task_prompt = (args.task_prompt or "").strip()
     if not task_prompt:
-        task_prompt = _ask("\n2/4 让它干什么活？一句话描述你想让这个 skill 完成的任务", "")
+        task_prompt = _ask(
+            "\n2/4 让它干什么活？一句话描述你想让这个 skill 完成的任务", ""
+        )
     else:
         print(f"\n2/4 让它干什么活？已指定：{task_prompt[:80]}")
     if not task_prompt:
-        return {"error": "needs_user_input", "message": "没拿到任务描述。评测需要知道让 skill 干什么活。请重新运行并描述任务。"}
+        return {
+            "error": "needs_user_input",
+            "message": "没拿到任务描述。评测需要知道让 skill 干什么活。请重新运行并描述任务。",
+        }
 
     models_answer = (args.models or "").strip()
     detected = get_opencode_models()
     default_models = ",".join(detected[:2]) if detected else ""
     if not models_answer:
-        models_answer = _ask("\n3/4 用哪些模型测？逗号分隔，比如 gpt-5,claude-4", default_models)
+        models_answer = _ask(
+            "\n3/4 用哪些模型测？逗号分隔，比如 gpt-5,claude-4", default_models
+        )
     models = [m.strip() for m in models_answer.split(",") if m.strip()]
     if not models:
-        return {"error": "needs_user_input", "message": "没拿到要测的模型。请重新运行并至少指定一个模型。"}
+        return {
+            "error": "needs_user_input",
+            "message": "没拿到要测的模型。请重新运行并至少指定一个模型。",
+        }
     print(f"\n3/4 用哪些模型测？已选：{', '.join(models)}")
 
     voting_answer = (args.voting_models or "").strip()
     default_voting = models[0]
     if not voting_answer:
-        voting_answer = _ask("\n4/4 请谁当评委？逗号分隔（回车用第一个被测模型兼任）", default_voting)
+        voting_answer = _ask(
+            "\n4/4 请谁当评委？逗号分隔（回车用第一个被测模型兼任）", default_voting
+        )
     voting_models = [m.strip() for m in voting_answer.split(",") if m.strip()]
     if not voting_models:
         voting_models = [models[0]]
@@ -826,6 +1113,7 @@ def main() -> None:
     # 有新版提示打在 stderr，避免混入子命令的 JSON 输出。
     try:
         from .update_checker import maybe_check_update_async
+
         maybe_check_update_async()
     except Exception:
         pass
@@ -836,8 +1124,13 @@ def main() -> None:
 
     if args.command == "update-check":
         from .update_checker import maybe_check_update
+
         notice = maybe_check_update(force=True)
-        result = {"checked": True, "update_available": bool(notice), "notice": notice or ""}
+        result = {
+            "checked": True,
+            "update_available": bool(notice),
+            "notice": notice or "",
+        }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 
@@ -853,14 +1146,18 @@ def main() -> None:
         elif args.generate:
             input_files = []
             if args.input_files:
-                input_files = [f.strip() for f in args.input_files.split(",") if f.strip()]
+                input_files = [
+                    f.strip() for f in args.input_files.split(",") if f.strip()
+                ]
             models = []
             if args.models:
                 models = [m.strip() for m in args.models.split(",") if m.strip()]
             voting_models = []
             if args.voting_models:
-                voting_models = [m.strip() for m in args.voting_models.split(",") if m.strip()]
-            result = cmd_plan_generate(
+                voting_models = [
+                    m.strip() for m in args.voting_models.split(",") if m.strip()
+                ]
+            config = PlanGenerateConfig(
                 skill_name=args.skill_name or "",
                 skill_path=args.skill_path or "",
                 task_prompt=args.task_prompt or "",
@@ -877,6 +1174,7 @@ def main() -> None:
                 host=getattr(args, "host", None),
                 host_config=_parse_host_config(getattr(args, "host_config", None)),
             )
+            result = cmd_plan_generate(config)
         else:
             print("❌ plan 命令需要 --init 或 --generate 参数", file=sys.stderr)
             result = {"error": "missing --init or --generate flag"}
@@ -885,13 +1183,17 @@ def main() -> None:
         plan_dir = Path(args.plan_dir).resolve()
         plan_json = plan_dir / "plan.json"
         if not plan_json.exists():
-            print(f"❌ 找不到 plan.json，请先执行 plan 命令: {plan_json}", file=sys.stderr)
+            print(
+                f"❌ 找不到 plan.json，请先执行 plan 命令: {plan_json}", file=sys.stderr
+            )
             result = {"error": "plan.json not found"}
         else:
             if args.execution_mode or getattr(args, "host", None):
                 config_snapshot = plan_dir / "config.snapshot.json"
                 if config_snapshot.exists():
-                    config_data = json.loads(config_snapshot.read_text(encoding="utf-8"))
+                    config_data = json.loads(
+                        config_snapshot.read_text(encoding="utf-8")
+                    )
                     if args.execution_mode:
                         config_data["execution_mode"] = args.execution_mode
                     if getattr(args, "host", None):
@@ -899,14 +1201,21 @@ def main() -> None:
                     host_cfg = _parse_host_config(getattr(args, "host_config", None))
                     if host_cfg:
                         config_data["host_config"] = host_cfg
-                    config_snapshot.write_text(json.dumps(config_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            result = {"run_dir": str(run_from_plan(
-                plan_dir,
-                dry_run=args.dry_run,
-                parallelism=args.parallelism,
-                review_parallelism=args.review_parallelism,
-                progress_interval=args.progress_interval,
-            ))}
+                    config_snapshot.write_text(
+                        json.dumps(config_data, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8",
+                    )
+            result = {
+                "run_dir": str(
+                    run_from_plan(
+                        plan_dir,
+                        dry_run=args.dry_run,
+                        parallelism=args.parallelism,
+                        review_parallelism=args.review_parallelism,
+                        progress_interval=args.progress_interval,
+                    )
+                )
+            }
 
     elif args.command == "analyze":
         result = analyze_existing_run(Path(args.run_dir).resolve())
@@ -930,7 +1239,9 @@ def main() -> None:
             print("❌ 联系不上任何模型。请确认 opencode 已安装并能用。")
             result = {"error": "no_models_found"}
         elif args.voting_models:
-            voting_models = [m.strip() for m in args.voting_models.split(",") if m.strip()]
+            voting_models = [
+                m.strip() for m in args.voting_models.split(",") if m.strip()
+            ]
             if not voting_models:
                 result = {"error": "还没告诉我要请哪些评委。请指定至少一个打分模型。"}
             else:
@@ -938,6 +1249,7 @@ def main() -> None:
                 for m in voting_models:
                     print(f"   - {m}")
                 from .engine import run_blind_vote_phase
+
                 result = run_blind_vote_phase(
                     run_dir,
                     voting_models=voting_models,
@@ -954,9 +1266,22 @@ def main() -> None:
 
     elif args.command == "pipeline":
         from .workflow import SkillEvaluationWorkflow
-        input_files = [f.strip() for f in args.input_files.split(",") if f.strip()] if args.input_files else []
-        models = [m.strip() for m in args.models.split(",") if m.strip()] if args.models else []
-        voting_models = [m.strip() for m in args.voting_models.split(",") if m.strip()] if args.voting_models else []
+
+        input_files = (
+            [f.strip() for f in args.input_files.split(",") if f.strip()]
+            if args.input_files
+            else []
+        )
+        models = (
+            [m.strip() for m in args.models.split(",") if m.strip()]
+            if args.models
+            else []
+        )
+        voting_models = (
+            [m.strip() for m in args.voting_models.split(",") if m.strip()]
+            if args.voting_models
+            else []
+        )
         detected_models = get_opencode_models()
         if not models:
             models = detected_models[:2] if detected_models else ["default-model"]
@@ -987,6 +1312,7 @@ def main() -> None:
     elif args.command == "verify-snapshot":
         from .assertions import verify_assertions_snapshot_file
         from .paired_gain import verify_p1_judgment_snapshot
+
         target_path = None
         if args.snapshot:
             target_path = Path(args.snapshot)
@@ -1001,7 +1327,9 @@ def main() -> None:
         if not target_path or not target_path.exists():
             result = {"error": f"找不到快照文件: {target_path}"}
         elif target_path.name == "judgment_snapshot.json":
-            result = verify_p1_judgment_snapshot(json.loads(target_path.read_text(encoding="utf-8")))
+            result = verify_p1_judgment_snapshot(
+                json.loads(target_path.read_text(encoding="utf-8"))
+            )
         else:
             result = verify_assertions_snapshot_file(target_path)
 
