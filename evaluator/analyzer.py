@@ -49,6 +49,8 @@ CHECKPOINT_PATTERNS = [
     r"assumption:",
 ]
 
+COMPILED_CHECKPOINT_PATTERNS = [re.compile(p, re.IGNORECASE) for p in CHECKPOINT_PATTERNS]
+
 DECISION_PATTERNS = [
     r"决策[：:]\s*(.+)",
     r"选择方案[：:]\s*(.+)",
@@ -390,8 +392,8 @@ def extract_evidence_chain(stdout_text: str, transcript_text: str, skill_phases:
                     break
     else:
         # 回退到通用关键词
-        for pattern in CHECKPOINT_PATTERNS:
-            for match in re.finditer(pattern, combined, re.IGNORECASE):
+        for pattern in COMPILED_CHECKPOINT_PATTERNS:
+            for match in pattern.finditer(combined):
                 start = max(0, match.start() - 20)
                 end = min(len(combined), match.end() + 50)
                 context = combined[start:end].replace("\n", " ").strip()
