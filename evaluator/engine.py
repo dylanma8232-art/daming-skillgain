@@ -225,7 +225,6 @@ from .host_session import (
     run_host_session,
     run_host_text,
 )
-from .executors import UnsupportedCapabilityError
 from .subject_adapter import get_subject_adapter
 
 # get_opencode_models: opencode 宿主域内模型发现，CLI 交互选型仍在使用（P3 保留项，
