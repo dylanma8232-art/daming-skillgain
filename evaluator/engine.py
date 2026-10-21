@@ -20,7 +20,7 @@ from hashlib import sha256
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 
 from .analyzer import write_run_summary
 from .models import ExecutionMetrics
@@ -28,7 +28,6 @@ from .io_utils import ensure_directory, write_json, write_text
 from .models import EvaluationConfig, ExperimentPlan, ExperimentResult, RunnerConfig
 from .reporting import generate_run_report, generate_anonymous_report
 from .result_files import select_result_files, write_result_selection
-
 
 LOGGER = logging.getLogger("skill_evaluator.engine")
 
@@ -64,7 +63,9 @@ class RunProgress:
             self.stage_started_at = time.time()
             self.total = total
             self.tasks = {}
-            self._append_event_locked({"event": "stage_started", "stage": stage, "total": total})
+            self._append_event_locked(
+                {"event": "stage_started", "stage": stage, "total": total}
+            )
             self._write_locked()
             self._print_locked(force=True)
 
@@ -78,23 +79,37 @@ class RunProgress:
                 "start_ts": time.time(),
                 **extra,
             }
-            self._append_event_locked({"event": "task_started", "stage": self.stage, "task": self.tasks[task_id]})
+            self._append_event_locked(
+                {
+                    "event": "task_started",
+                    "stage": self.stage,
+                    "task": self.tasks[task_id],
+                }
+            )
             self._write_locked()
             self._print_locked()
 
     def task_finished(self, task_id: str, success: bool, **extra: Any) -> None:
         with self.lock:
-            task = self.tasks.get(task_id, {"id": task_id, "label": task_id, "start_ts": time.time()})
-            duration = round(time.time() - float(task.get("start_ts") or time.time()), 1)
-            task.update({
-                "status": "completed" if success else "failed",
-                "success": success,
-                "duration_seconds": duration,
-                "finished_at": datetime.now().isoformat(),
-                **extra,
-            })
+            task = self.tasks.get(
+                task_id, {"id": task_id, "label": task_id, "start_ts": time.time()}
+            )
+            duration = round(
+                time.time() - float(task.get("start_ts") or time.time()), 1
+            )
+            task.update(
+                {
+                    "status": "completed" if success else "failed",
+                    "success": success,
+                    "duration_seconds": duration,
+                    "finished_at": datetime.now().isoformat(),
+                    **extra,
+                }
+            )
             self.tasks[task_id] = task
-            self._append_event_locked({"event": "task_finished", "stage": self.stage, "task": task})
+            self._append_event_locked(
+                {"event": "task_finished", "stage": self.stage, "task": task}
+            )
             self._write_locked()
             self._print_locked(force=True)
 
@@ -113,10 +128,16 @@ class RunProgress:
                 "started_at": datetime.now().isoformat(),
                 "finished_at": datetime.now().isoformat(),
                 "duration_seconds": wall_clock,
-                **{k: v for k, v in extra.items() if k not in ("model", "mode", "wall_clock_seconds")},
+                **{
+                    k: v
+                    for k, v in extra.items()
+                    if k not in ("model", "mode", "wall_clock_seconds")
+                },
             }
             self.tasks[task_id] = task
-            self._append_event_locked({"event": "task_skipped_existing", "stage": self.stage, "task": task})
+            self._append_event_locked(
+                {"event": "task_skipped_existing", "stage": self.stage, "task": task}
+            )
             self._write_locked()
             self._print_locked(force=True)
 
@@ -132,7 +153,12 @@ class RunProgress:
         failed = sum(1 for task in values if task.get("status") == "failed")
         running = sum(1 for task in values if task.get("status") == "running")
         queued = max(self.total - completed - failed - running, 0)
-        return {"completed": completed, "failed": failed, "running": running, "queued": queued}
+        return {
+            "completed": completed,
+            "failed": failed,
+            "running": running,
+            "queued": queued,
+        }
 
     def _snapshot_locked(self) -> dict[str, Any]:
         counts = self._counts_locked()
@@ -145,7 +171,9 @@ class RunProgress:
         for task in self.tasks.values():
             item = {k: v for k, v in task.items() if k != "start_ts"}
             if task.get("status") == "running":
-                item["elapsed_seconds"] = round(time.time() - float(task.get("start_ts") or time.time()), 1)
+                item["elapsed_seconds"] = round(
+                    time.time() - float(task.get("start_ts") or time.time()), 1
+                )
             public_tasks.append(item)
         return {
             "stage": self.stage,
@@ -183,9 +211,14 @@ class RunProgress:
             f"用时 {snapshot['elapsed_seconds']:.0f}s{eta_text}",
             flush=True,
         )
-        running = [task for task in snapshot["tasks"] if task.get("status") == "running"]
+        running = [
+            task for task in snapshot["tasks"] if task.get("status") == "running"
+        ]
         if running:
-            labels = ", ".join(f"{task.get('label')} {task.get('elapsed_seconds', 0):.0f}s" for task in running[:4])
+            labels = ", ".join(
+                f"{task.get('label')} {task.get('elapsed_seconds', 0):.0f}s"
+                for task in running[:4]
+            )
             print(f"    running: {labels}", flush=True)
 
 
@@ -195,8 +228,15 @@ def _wait_for_artifacts_settle(artifacts_dir: Path, max_seconds: float = 2.0) ->
     last_signature: tuple[tuple[str, int], ...] | None = None
     stable_seen = 0
     while time.time() - start < max_seconds:
-        files = sorted(item for item in artifacts_dir.rglob("*") if item.is_file()) if artifacts_dir.exists() else []
-        signature = tuple((str(item.relative_to(artifacts_dir)), item.stat().st_size) for item in files)
+        files = (
+            sorted(item for item in artifacts_dir.rglob("*") if item.is_file())
+            if artifacts_dir.exists()
+            else []
+        )
+        signature = tuple(
+            (str(item.relative_to(artifacts_dir)), item.stat().st_size)
+            for item in files
+        )
         if signature and signature == last_signature:
             stable_seen += 1
             if stable_seen >= 2:
@@ -277,8 +317,6 @@ def run_host_experiment_session(
     )
 
 
-
-
 def test_model_connectivity(
     models: list[str],
     execution_mode: str = "cli-attach",
@@ -302,7 +340,12 @@ def test_model_connectivity(
 
     with tempfile.TemporaryDirectory(prefix="eval_connect_") as test_dir:
         for model in models:
-            detail = {"model": model, "status": "unknown", "latency_ms": 0.0, "error": None}
+            detail = {
+                "model": model,
+                "status": "unknown",
+                "latency_ms": 0.0,
+                "error": None,
+            }
             start = time.time()
             try:
                 session = run_host_session(
@@ -319,9 +362,9 @@ def test_model_connectivity(
                     detail["status"] = "ok"
                 else:
                     detail["status"] = "failed"
-                    detail["error"] = (
-                        (session.stderr or session.stdout).strip()[:300] or "无输出"
-                    )
+                    detail["error"] = (session.stderr or session.stdout).strip()[
+                        :300
+                    ] or "无输出"
             except subprocess.TimeoutExpired:
                 detail["status"] = "timeout"
                 detail["error"] = f"连通测试超时（{timeout}s）"
@@ -378,7 +421,10 @@ def print_connectivity_report(report: dict[str, Any]) -> None:
 
 # ========== Token 提取 ==========
 
-def _extract_tokens_from_output_common(stdout_text: str, stderr_text: str) -> dict[str, int] | None:
+
+def _extract_tokens_from_output_common(
+    stdout_text: str, stderr_text: str
+) -> dict[str, int] | None:
     combined = stdout_text + "\n" + stderr_text
 
     prompt_tokens = 0
@@ -390,15 +436,21 @@ def _extract_tokens_from_output_common(stdout_text: str, stderr_text: str) -> di
     if prompt_match:
         prompt_tokens = int(prompt_match.group(1))
 
-    completion_match = re.search(r"completion[_\s]?tokens[^\d]*(\d+)", combined, re.IGNORECASE)
+    completion_match = re.search(
+        r"completion[_\s]?tokens[^\d]*(\d+)", combined, re.IGNORECASE
+    )
     if completion_match:
         completion_tokens = int(completion_match.group(1))
 
-    total_match = re.search(r"(?:total[_\s]?tokens)[^\d]*(\d+)", combined, re.IGNORECASE)
+    total_match = re.search(
+        r"(?:total[_\s]?tokens)[^\d]*(\d+)", combined, re.IGNORECASE
+    )
     if total_match:
         total_tokens = int(total_match.group(1))
 
-    count_match = re.search(r"(?:api[_\s]?call|calls)[^\d]*(\d+)", combined, re.IGNORECASE)
+    count_match = re.search(
+        r"(?:api[_\s]?call|calls)[^\d]*(\d+)", combined, re.IGNORECASE
+    )
     if count_match:
         api_call_count = int(count_match.group(1))
 
@@ -429,26 +481,26 @@ def select_models_interactive(
 ) -> list[str]:
     """
     交互式选择模型
-    
+
     Args:
         available_models: 可选的模型列表
         mode: 'explicit'（明投，显示真实名称）或 'blind'（盲评，匿名化）
         default_selected: 默认选中的模型列表
         auto_detect: 是否自动尝试从 opencode 获取模型列表
-    
+
     Returns:
         用户选择的模型列表
     """
     if default_selected is None:
         default_selected = []
-    
+
     # 如果可用模型列表为空，尝试自动检测
     if not available_models and auto_detect:
         detected = get_opencode_models()
         if detected:
             available_models = detected
             print(f"\n🔍 自动检测到 {len(available_models)} 个 opencode 模型")
-    
+
     if not available_models:
         print("\n⚠️  未提供可用模型列表，请手动输入模型名称（逗号分隔）")
         try:
@@ -457,17 +509,15 @@ def select_models_interactive(
                 available_models = [m.strip() for m in answer.split(",") if m.strip()]
         except EOFError:
             pass
-    
+
     # 匿名映射（盲评模式）
     anonymous_map: dict[str, str] = {}
     if mode == "blind":
         for i, model in enumerate(available_models):
             anonymous_map[f"模型{chr(65 + i)}"] = model
-    
-    display_models = (
-        list(anonymous_map.keys()) if mode == "blind" else available_models
-    )
-    
+
+    display_models = list(anonymous_map.keys()) if mode == "blind" else available_models
+
     print(f"\n{'='*60}")
     if mode == "blind":
         print("🎯 盲评模式：模型名称已匿名化")
@@ -485,7 +535,7 @@ def select_models_interactive(
     print("")
     print("输入编号或多选（如: 1,3,5 或 1-3）")
     print(f"{'='*60}")
-    
+
     selected = []
     max_attempts = 3
     for attempt in range(max_attempts):
@@ -493,7 +543,7 @@ def select_models_interactive(
             answer = input("您的选择: ").strip()
         except EOFError:
             answer = ""
-        
+
         if not answer:
             if attempt < max_attempts - 1:
                 print("⚠️  必须明确选择模型，请输入编号")
@@ -501,7 +551,7 @@ def select_models_interactive(
             else:
                 print("❌ 未做出有效选择，退出")
                 return []
-        
+
         selected = parse_selection(answer, display_models)
         if selected:
             break
@@ -512,11 +562,11 @@ def select_models_interactive(
             else:
                 print("❌ 未做出有效选择，退出")
                 return []
-    
+
     if mode == "blind":
         real_models = [anonymous_map.get(m, m) for m in selected]
         return real_models
-    
+
     return selected
 
 
@@ -524,7 +574,7 @@ def parse_selection(answer: str, options: list[str]) -> list[str]:
     """解析用户输入的选择"""
     selected = []
     parts = answer.split(",")
-    
+
     for part in parts:
         part = part.strip()
         if "-" in part:
@@ -544,7 +594,7 @@ def parse_selection(answer: str, options: list[str]) -> list[str]:
                     selected.append(options[idx])
             except ValueError:
                 pass
-    
+
     return selected
 
 
@@ -561,7 +611,7 @@ def select_models_for_reproduction(
             reverse_map[anon] = real
     else:
         display_models = voted_models
-    
+
     print(f"\n{'='*60}")
     print("🔄 盲评复现环节")
     print(f"{'='*60}")
@@ -571,20 +621,20 @@ def select_models_for_reproduction(
     print("")
     print("输入编号选择要复现评审的模型（如: 1,3 或 1-2）")
     print(f"{'='*60}")
-    
+
     try:
         answer = input("复现选择: ").strip()
     except EOFError:
         answer = ""
-    
+
     if not answer:
         return voted_models
-    
+
     selected = parse_selection(answer, display_models)
-    
+
     if anonymous_map:
         return [reverse_map.get(m, m) for m in selected]
-    
+
     return selected
 
 
@@ -668,17 +718,72 @@ class EvaluationEngine:
         except Exception:
             return "unknown"
 
-        data_keywords = ["数据", "分析", "excel", "csv", "xlsx", "dataset", "报表", "指标", "统计", "可视化", "chart", "graph", "plot"]
-        code_keywords = ["代码", "code", "编程", "函数", "function", "api", "开发", "debug", "重构", "refactor", "test", "测试"]
-        ui_keywords = ["ui", "界面", "页面", "页面", "css", "html", "前端", "frontend", "组件", "component", "布局", "layout"]
-        doc_keywords = ["文档", "doc", "文档", "写作", "write", "报告", "report", "总结", "summary"]
+        data_keywords = [
+            "数据",
+            "分析",
+            "excel",
+            "csv",
+            "xlsx",
+            "dataset",
+            "报表",
+            "指标",
+            "统计",
+            "可视化",
+            "chart",
+            "graph",
+            "plot",
+        ]
+        code_keywords = [
+            "代码",
+            "code",
+            "编程",
+            "函数",
+            "function",
+            "api",
+            "开发",
+            "debug",
+            "重构",
+            "refactor",
+            "test",
+            "测试",
+        ]
+        ui_keywords = [
+            "ui",
+            "界面",
+            "页面",
+            "页面",
+            "css",
+            "html",
+            "前端",
+            "frontend",
+            "组件",
+            "component",
+            "布局",
+            "layout",
+        ]
+        doc_keywords = [
+            "文档",
+            "doc",
+            "文档",
+            "写作",
+            "write",
+            "报告",
+            "report",
+            "总结",
+            "summary",
+        ]
 
         data_score = sum(1 for kw in data_keywords if kw in content)
         code_score = sum(1 for kw in code_keywords if kw in content)
         ui_score = sum(1 for kw in ui_keywords if kw in content)
         doc_score = sum(1 for kw in doc_keywords if kw in content)
 
-        scores = {"data_analysis": data_score, "code_generation": code_score, "ui_building": ui_score, "documentation": doc_score}
+        scores = {
+            "data_analysis": data_score,
+            "code_generation": code_score,
+            "ui_building": ui_score,
+            "documentation": doc_score,
+        }
         best = max(scores, key=scores.get)
         return best if scores[best] > 0 else "unknown"
 
@@ -700,7 +805,9 @@ class EvaluationEngine:
                 for use_skill in self.config.use_skill_modes:
                     for repetition in range(1, self.config.repetitions + 1):
                         safe_model = self.slugify(model)
-                        rep_suffix = f"__rep{repetition}" if self.config.repetitions > 1 else ""
+                        rep_suffix = (
+                            f"__rep{repetition}" if self.config.repetitions > 1 else ""
+                        )
                         case_name = (
                             f"{runner.name}__{safe_model}__"
                             f"{'with-skill' if use_skill else 'without-skill'}{rep_suffix}"
@@ -708,8 +815,10 @@ class EvaluationEngine:
                         workspace_dir = run_dir / "experiments" / case_name
                         artifacts_dir = workspace_dir / "artifacts"
                         prompt_text = self.build_prompt(
-                            model=model, runner_name=runner.name, use_skill=use_skill,
-                            workspace_dir=str(workspace_dir)
+                            model=model,
+                            runner_name=runner.name,
+                            use_skill=use_skill,
+                            workspace_dir=str(workspace_dir),
                         )
                         plan = ExperimentPlan(
                             runner_name=runner.name,
@@ -730,7 +839,8 @@ class EvaluationEngine:
                         plans.append((runner, plan))
         LOGGER.info(
             "生成实验计划完成: count=%s, repetitions=%s",
-            len(plans), self.config.repetitions,
+            len(plans),
+            self.config.repetitions,
         )
         return plans
 
@@ -758,7 +868,7 @@ class EvaluationEngine:
             input_file_flags=input_file_flags,
             skill_flag=skill_flag,
         )
-        command = re.sub(r'\s+', ' ', command).strip()
+        command = re.sub(r"\s+", " ", command).strip()
         command = f"cd {shlex.quote(str(plan.workspace_dir))} && {command}"
         LOGGER.info(
             "构建执行命令: runner=%s, model=%s, use_skill=%s",
@@ -777,12 +887,19 @@ class EvaluationEngine:
 
         # P2: 宿主专用工作区预处理（OpenCode 专属的 opencode.json / 依赖目录清理）
         # 仅在宿主确为 opencode 时执行；其他宿主不写入 opencode 专属文件。
-        config_host = resolve_config_host(self.config) or EXECUTION_MODE_DEFAULT_HOST.get(
+        config_host = resolve_config_host(
+            self.config
+        ) or EXECUTION_MODE_DEFAULT_HOST.get(
             str(self.config.execution_mode or ""), "opencode"
         )
         if config_host == "opencode":
             opencode_dir = plan.workspace_dir / ".opencode"
-            for item in ["node_modules", "bun.lock", "package.json", "package-lock.json"]:
+            for item in [
+                "node_modules",
+                "bun.lock",
+                "package.json",
+                "package-lock.json",
+            ]:
                 path = opencode_dir / item
                 if path.is_dir():
                     shutil.rmtree(path, ignore_errors=True)
@@ -792,10 +909,14 @@ class EvaluationEngine:
             git_dir = plan.workspace_dir / ".git"
             if not git_dir.exists():
                 git_dir.mkdir(parents=True, exist_ok=True)
-                (git_dir / "config").write_text("[core]\n\trepositoryformatversion = 0\n", encoding="utf-8")
+                (git_dir / "config").write_text(
+                    "[core]\n\trepositoryformatversion = 0\n", encoding="utf-8"
+                )
 
             target_skill_name = self.config.target_skill.strip()
-            skill_permissions = {target_skill_name: "allow"} if target_skill_name else {}
+            skill_permissions = (
+                {target_skill_name: "allow"} if target_skill_name else {}
+            )
             skill_permissions["daming-skillgain"] = "deny"
 
             opencode_config = {
@@ -813,7 +934,9 @@ class EvaluationEngine:
             git_dir = plan.workspace_dir / ".git"
             if not git_dir.exists():
                 git_dir.mkdir(parents=True, exist_ok=True)
-                (git_dir / "config").write_text("[core]\n\trepositoryformatversion = 0\n", encoding="utf-8")
+                (git_dir / "config").write_text(
+                    "[core]\n\trepositoryformatversion = 0\n", encoding="utf-8"
+                )
 
         for input_file in plan.input_files:
             if input_file.exists():
@@ -841,7 +964,9 @@ class EvaluationEngine:
                 "workspace_skill_dir": self.get_workspace_skill_dir(plan),
                 "run_dir": str(run_dir),
                 "workspace_dir": str(plan.workspace_dir),
-                "skill_description": self.config.evaluation_contract.get("primary_goal", "")[:200],
+                "skill_description": self.config.evaluation_contract.get(
+                    "primary_goal", ""
+                )[:200],
                 "preflight": self.config.preflight,
                 "resource_requirements": self.config.resource_requirements,
                 # 注意：evaluation_contract 不写入工作区 metadata，
@@ -851,26 +976,38 @@ class EvaluationEngine:
         LOGGER.info("实验目录已落盘: workspace=%s", plan.workspace_dir)
         return command
 
-    def build_prompt(self, model: str, runner_name: str, use_skill: bool, workspace_dir: str = "") -> str:
+    def build_prompt(
+        self, model: str, runner_name: str, use_skill: bool, workspace_dir: str = ""
+    ) -> str:
         # 纪律 4：without-skill 隔离验证：提示词严格对称，无任何 skill 泄露
-        skill_header_lines = [f"目标 skill: {self.config.target_skill}"] if use_skill else []
+        skill_header_lines = (
+            [f"目标 skill: {self.config.target_skill}"] if use_skill else []
+        )
         interactive_instruction = (
-            "## 交互式处理\n"
-            "如果你使用的 skill 包含交互式确认步骤（如'请确认'、'询问用户'、'请选择'等），"
-            "你必须自主扮演用户角色，根据当前任务上下文做出合理判断和回答，"
-            "不能停下来等待真实用户输入。对于不确定的确认，使用保守默认值并记录。"
-        ) if use_skill else ""
-        input_file_lines = [f"- {item.name}" for item in self.input_files] or ["- （无输入文件）"]
+            (
+                "## 交互式处理\n"
+                "如果你使用的 skill 包含交互式确认步骤（如'请确认'、'询问用户'、'请选择'等），"
+                "你必须自主扮演用户角色，根据当前任务上下文做出合理判断和回答，"
+                "不能停下来等待真实用户输入。对于不确定的确认，使用保守默认值并记录。"
+            )
+            if use_skill
+            else ""
+        )
+        input_file_lines = [f"- {item.name}" for item in self.input_files] or [
+            "- （无输入文件）"
+        ]
         user_task_lines = [self.config.task_prompt]
         cwd_instruction = ""
         if workspace_dir:
-            cwd_instruction = "\n".join([
-                "## 重要：当前工作目录",
-                f"你当前的工作目录是：{workspace_dir}",
-                "所有文件操作（读取输入、写入输出）都必须基于当前工作目录。",
-                "**绝对不要使用原始数据的绝对路径（如 /home/user/dataset/ 之类的宿主机专属路径）**。",
-                "",
-            ])
+            cwd_instruction = "\n".join(
+                [
+                    "## 重要：当前工作目录",
+                    f"你当前的工作目录是：{workspace_dir}",
+                    "所有文件操作（读取输入、写入输出）都必须基于当前工作目录。",
+                    "**绝对不要使用原始数据的绝对路径（如 /home/user/dataset/ 之类的宿主机专属路径）**。",
+                    "",
+                ]
+            )
         return "\n".join(
             [
                 "# Evaluation Task",
@@ -901,11 +1038,10 @@ class EvaluationEngine:
                 "2. 将关键产出保存到 artifacts 目录中（文件类型和内容由你自行决定）。**必须使用当前工作目录下的相对路径 artifacts/，不要使用绝对路径如 ~/artifacts/ 或 /Users/.../artifacts/**。",
                 "3. 任务完成后，必须在当前工作目录下的 artifacts/summary.md 文件中创建 summary.md，简要说明你产出了什么、包含哪些关键内容。**路径必须是 artifacts/summary.md（相对路径）**。",
                 "4. 必须额外保存一份执行留痕文件，记录关键步骤、默认假设和产物对应关系。",
-                "5. 必须创建 artifacts/result_manifest.json，声明你交付给用户验收的最终结果文件；summary、execution_trace、日志、脚本和中间素材不能声明为结果文件。JSON 格式：{\"result_files\":[{\"path\":\"artifacts/最终结果文件.ext\",\"role\":\"primary\",\"description\":\"为什么这是用户要验收的最终交付物\"}],\"evidence_files\":[\"artifacts/summary.md\",\"artifacts/execution_trace.md\"]}。",
+                '5. 必须创建 artifacts/result_manifest.json，声明你交付给用户验收的最终结果文件；summary、execution_trace、日志、脚本和中间素材不能声明为结果文件。JSON 格式：{"result_files":[{"path":"artifacts/最终结果文件.ext","role":"primary","description":"为什么这是用户要验收的最终交付物"}],"evidence_files":["artifacts/summary.md","artifacts/execution_trace.md"]}。',
                 "6. 在结束时明确说明任务是否完成。",
             ]
         )
-
 
     def prepare_workspace_skill(self, plan: ExperimentPlan) -> None:
         """按宿主规则注入被测 skill 到实验工作区（P2: 经 Subject Adapter 参数化）。
@@ -914,7 +1050,9 @@ class EvaluationEngine:
         without-skill: 严格隔离，确保宿主 skills 目录无任何残留。
         """
         workspace_skill_dir_value = self.get_workspace_skill_dir(plan)
-        config_host = resolve_config_host(self.config) or EXECUTION_MODE_DEFAULT_HOST.get(
+        config_host = resolve_config_host(
+            self.config
+        ) or EXECUTION_MODE_DEFAULT_HOST.get(
             str(self.config.execution_mode or ""), "opencode"
         )
         if not plan.use_skill or not self.config.target_skill.strip():
@@ -987,7 +1125,9 @@ class EvaluationEngine:
         """按宿主约定返回工作区内 skill 注入目录（P2: 经 Subject Adapter 参数化）。"""
         if not plan.use_skill or not self.config.target_skill.strip():
             return None
-        config_host = resolve_config_host(self.config) or EXECUTION_MODE_DEFAULT_HOST.get(
+        config_host = resolve_config_host(
+            self.config
+        ) or EXECUTION_MODE_DEFAULT_HOST.get(
             str(self.config.execution_mode or ""), "opencode"
         )
         try:
@@ -996,17 +1136,24 @@ class EvaluationEngine:
             adapter = None
         if adapter is not None:
             try:
-                injected = adapter.inject_skill(self.target_skill_path, plan.workspace_dir, self.config.target_skill)
+                injected = adapter.inject_skill(
+                    self.target_skill_path, plan.workspace_dir, self.config.target_skill
+                )
                 # 注入完成即验证加载，防止假对照
-                verify = adapter.verify_skill_loaded(plan.workspace_dir, self.config.target_skill)
+                verify = adapter.verify_skill_loaded(
+                    plan.workspace_dir, self.config.target_skill
+                )
                 if not verify["loaded"]:
                     from .subject_adapter import SubjectAdapterError
+
                     raise SubjectAdapterError(
                         f"[{config_host}] skill 注入后加载验证失败: {verify['evidence']}"
                     )
                 return injected.get("skill_dir")
             except Exception as e:
-                LOGGER.warning("Subject Adapter 注入失败，回退到 opencode 目录约定: %s", e)
+                LOGGER.warning(
+                    "Subject Adapter 注入失败，回退到 opencode 目录约定: %s", e
+                )
         return str(
             plan.workspace_dir / ".opencode" / "skills" / self.config.target_skill
         )
@@ -1024,21 +1171,27 @@ class EvaluationEngine:
         artifact_files: list[str],
     ) -> tuple[bool, str, str | None]:
         return _classify_execution(
-            exit_code=exit_code, stdout_text=stdout_text,
-            stderr_text=stderr_text, artifact_files=artifact_files,
+            exit_code=exit_code,
+            stdout_text=stdout_text,
+            stderr_text=stderr_text,
+            artifact_files=artifact_files,
         )
 
     def slugify(self, value: str) -> str:
         return value.replace("/", "_").replace(" ", "-")
 
-    def _extract_tokens_from_output(self, stdout_text: str, stderr_text: str, model: str) -> dict | None:
+    def _extract_tokens_from_output(
+        self, stdout_text: str, stderr_text: str, model: str
+    ) -> dict | None:
         return _extract_tokens_from_output_common(stdout_text, stderr_text)
 
     def _result_to_dict(self, result: ExperimentResult) -> dict[str, Any]:
         d = asdict(result)
         if isinstance(d.get("execution_metrics"), dict):
             pass
-        elif hasattr(result, "execution_metrics") and hasattr(result.execution_metrics, "to_dict"):
+        elif hasattr(result, "execution_metrics") and hasattr(
+            result.execution_metrics, "to_dict"
+        ):
             d["execution_metrics"] = result.execution_metrics.to_dict()
         return d
 
@@ -1050,7 +1203,10 @@ class EvaluationEngine:
 
         self.materialize_plan(plan, runner, plan.workspace_dir.parent.parent)
         if dry_run:
-            write_text(plan.artifacts_dir / "result.md", "# Dry Run Artifact\n\n此文件用于验证产物索引与分析流程。\n")
+            write_text(
+                plan.artifacts_dir / "result.md",
+                "# Dry Run Artifact\n\n此文件用于验证产物索引与分析流程。\n",
+            )
 
         exit_code, stdout_text, stderr_text = _execute_experiment_impl(
             prompt_text=plan.prompt_text,
@@ -1079,27 +1235,40 @@ class EvaluationEngine:
         )
 
         success, status, failure_reason = self.classify_execution(
-            exit_code=exit_code, stdout_text=stdout_text, stderr_text=stderr_text, artifact_files=artifact_files,
+            exit_code=exit_code,
+            stdout_text=stdout_text,
+            stderr_text=stderr_text,
+            artifact_files=artifact_files,
         )
 
         # 短执行时间检测：如果执行时间极短（< 10s）且无产物，标记为疑似未真正执行
         wall_clock = execution_metrics.wall_clock_seconds or 0
         if wall_clock < 10 and not artifact_files and success is False:
             status = "suspicious_short_execution"
-            failure_reason = (
-                f"执行仅 {wall_clock:.1f}s 且无产物，疑似模型未真正响应或 OpenCode CLI 调用异常。"
-            )
+            failure_reason = f"执行仅 {wall_clock:.1f}s 且无产物，疑似模型未真正响应或 OpenCode CLI 调用异常。"
             LOGGER.warning(
                 "短执行警告: model=%s, use_skill=%s, wall_clock=%.1fs, artifacts=%d",
-                plan.model, plan.use_skill, wall_clock, len(artifact_files),
+                plan.model,
+                plan.use_skill,
+                wall_clock,
+                len(artifact_files),
             )
 
         result = ExperimentResult(
-            runner_name=runner.name, model=plan.model, use_skill=plan.use_skill,
-            exit_code=exit_code, success=success, status=status, failure_reason=failure_reason,
-            workspace_dir=str(plan.workspace_dir), stdout_file=str(plan.stdout_file),
-            stderr_file=str(plan.stderr_file), transcript_file=str(plan.transcript_file),
-            artifacts=artifact_files, analysis={}, execution_metrics=execution_metrics,
+            runner_name=runner.name,
+            model=plan.model,
+            use_skill=plan.use_skill,
+            exit_code=exit_code,
+            success=success,
+            status=status,
+            failure_reason=failure_reason,
+            workspace_dir=str(plan.workspace_dir),
+            stdout_file=str(plan.stdout_file),
+            stderr_file=str(plan.stderr_file),
+            transcript_file=str(plan.transcript_file),
+            artifacts=artifact_files,
+            analysis={},
+            execution_metrics=execution_metrics,
         )
         write_json(plan.workspace_dir / "result.json", self._result_to_dict(result))
         return result
@@ -1193,7 +1362,10 @@ class EvaluationEngine:
                 "target_skill_path": str(self.target_skill_path),
                 "task_prompt": self.config.task_prompt,
                 "skill_promises": skill_promises,
-                "host": resolve_config_host(self.config) or EXECUTION_MODE_DEFAULT_HOST.get(str(self.config.execution_mode or ""), "opencode"),
+                "host": resolve_config_host(self.config)
+                or EXECUTION_MODE_DEFAULT_HOST.get(
+                    str(self.config.execution_mode or ""), "opencode"
+                ),
                 "results": [asdict(item) for item in results],
             },
         )
@@ -1275,7 +1447,11 @@ def generate_existing_run_report(run_dir: Path) -> dict[str, Any]:
     LOGGER.info("开始为已有运行目录生成 HTML 报告: run_dir=%s", run_dir)
     output_path = generate_run_report(run_dir)
     anon_output_path = generate_anonymous_report(run_dir)
-    return {"report_path": str(output_path), "anonymous_report_path": str(anon_output_path), "html_generated": output_path.exists()}
+    return {
+        "report_path": str(output_path),
+        "anonymous_report_path": str(anon_output_path),
+        "html_generated": output_path.exists(),
+    }
 
 
 def run_summary_stage(
@@ -1337,7 +1513,9 @@ def run_summary_stage(
             if with_reasons:
                 stat_lines.append(f"  With-Skill获票原因: {with_reasons[0][:100]}")
             if without_reasons:
-                stat_lines.append(f"  Without-Skill获票原因: {without_reasons[0][:100]}")
+                stat_lines.append(
+                    f"  Without-Skill获票原因: {without_reasons[0][:100]}"
+                )
         vote_stats_text = "\n".join(stat_lines)
 
     summary_prompt = f"""基于评委评价和投票，给出结论。
@@ -1498,27 +1676,38 @@ def _execute_experiment_impl(
         execution_metrics.end_time = end_time.isoformat()
         if execution_metrics.start_time:
             execution_metrics.wall_clock_seconds = round(
-                (end_time - datetime.fromisoformat(execution_metrics.start_time)).total_seconds(), 2
+                (
+                    end_time - datetime.fromisoformat(execution_metrics.start_time)
+                ).total_seconds(),
+                2,
             )
         return 0, "[dry-run]\n", ""
 
     try:
-        exit_code, stdout_text, stderr_text, transcript_text, usage_info = run_host_experiment_session(
-            model=plan_model,
-            prompt=prompt_text,
-            cwd=workspace_dir,
-            timeout_seconds=timeout_seconds,
-            execution_mode=execution_mode,
-            host=host,
-            host_config=host_config,
-            files=[str(item) for item in (input_files or [])],
+        exit_code, stdout_text, stderr_text, transcript_text, usage_info = (
+            run_host_experiment_session(
+                model=plan_model,
+                prompt=prompt_text,
+                cwd=workspace_dir,
+                timeout_seconds=timeout_seconds,
+                execution_mode=execution_mode,
+                host=host,
+                host_config=host_config,
+                files=[str(item) for item in (input_files or [])],
+            )
         )
-        write_text(transcript_file, f"# Transcript\n\n{transcript_text or stdout_text}\n")
+        write_text(
+            transcript_file, f"# Transcript\n\n{transcript_text or stdout_text}\n"
+        )
 
         if stderr_text:
             write_text(stderr_file, stderr_text)
 
-        token_info = usage_info if usage_info else _extract_tokens_from_output_common(stdout_text, stderr_text)
+        token_info = (
+            usage_info
+            if usage_info
+            else _extract_tokens_from_output_common(stdout_text, stderr_text)
+        )
         if token_info:
             execution_metrics.prompt_tokens = token_info.get("prompt_tokens")
             execution_metrics.completion_tokens = token_info.get("completion_tokens")
@@ -1537,7 +1726,9 @@ def _execute_experiment_impl(
         exit_code = 1
         write_text(stderr_file, stderr_text)
         if not transcript_file.exists():
-            write_text(transcript_file, f"# Transcript\n\nCLI 执行异常: {stderr_text}\n")
+            write_text(
+                transcript_file, f"# Transcript\n\nCLI 执行异常: {stderr_text}\n"
+            )
 
     # 确保 stdout / stderr 持久化到文件
     if not dry_run:
@@ -1548,7 +1739,10 @@ def _execute_experiment_impl(
     execution_metrics.end_time = end_time.isoformat()
     if execution_metrics.start_time:
         execution_metrics.wall_clock_seconds = round(
-            (end_time - datetime.fromisoformat(execution_metrics.start_time)).total_seconds(), 2
+            (
+                end_time - datetime.fromisoformat(execution_metrics.start_time)
+            ).total_seconds(),
+            2,
         )
 
     return exit_code, stdout_text, stderr_text
@@ -1587,11 +1781,14 @@ def run_from_plan(
         _executor.require_capability("file_ops", purpose="实验执行（产物型评测任务）")
         LOGGER.info(
             "宿主能力预检通过: host=%s, capabilities=%s",
-            _host, sorted(_executor.capabilities.keys()),
+            _host,
+            sorted(_executor.capabilities.keys()),
         )
 
     indexed_results: dict[int, ExperimentResult] = {}
-    requested_parallelism = parallelism if parallelism and parallelism > 0 else config.max_parallelism
+    requested_parallelism = (
+        parallelism if parallelism and parallelism > 0 else config.max_parallelism
+    )
     max_workers = min(max(1, requested_parallelism), len(all_plans)) if all_plans else 1
     timeout_seconds = config.runner_timeout_seconds
     LOGGER.info("执行超时设置为: %d 秒", timeout_seconds)
@@ -1619,7 +1816,9 @@ def run_from_plan(
             subject_adapter = None  # 未知宿主时回退到通用验证（注入结果由计划阶段保证）
         if not use_skill:
             if subject_adapter is not None:
-                cleanup_evidence = subject_adapter.cleanup_skill(workspace_dir, config.target_skill)
+                cleanup_evidence = subject_adapter.cleanup_skill(
+                    workspace_dir, config.target_skill
+                )
             else:
                 cleanup_evidence = {}
             skill_loaded = False
@@ -1637,8 +1836,12 @@ def run_from_plan(
                         config.target_skill_path, workspace_dir, config.target_skill
                     )
                 except Exception as inject_err:
-                    LOGGER.warning("Subject Adapter 注入异常（继续执行）: %s", inject_err)
-                verify = subject_adapter.verify_skill_loaded(workspace_dir, config.target_skill)
+                    LOGGER.warning(
+                        "Subject Adapter 注入异常（继续执行）: %s", inject_err
+                    )
+                verify = subject_adapter.verify_skill_loaded(
+                    workspace_dir, config.target_skill
+                )
                 skill_loaded = bool(verify["loaded"]) or bool(config.target_skill)
                 loading_evidence = {
                     **verify["evidence"],
@@ -1656,7 +1859,11 @@ def run_from_plan(
                 }
 
         prompt_file = workspace_dir / "prompt.md"
-        prompt_text = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else plan_item.get("prompt", "")
+        prompt_text = (
+            prompt_file.read_text(encoding="utf-8")
+            if prompt_file.exists()
+            else plan_item.get("prompt", "")
+        )
 
         max_retries = getattr(config, "max_retries", 2)
         retry_attempts: list[dict[str, Any]] = []
@@ -1688,7 +1895,8 @@ def run_from_plan(
             # 收集产出文件
             artifact_files = sorted(
                 str(item.relative_to(workspace_dir))
-                for item in artifacts_dir.rglob("*") if item.is_file()
+                for item in artifacts_dir.rglob("*")
+                if item.is_file()
             )
             write_result_selection(
                 workspace_dir,
@@ -1697,19 +1905,23 @@ def run_from_plan(
             )
 
             success, status, failure_reason = _classify_execution(
-                exit_code=exit_code, stdout_text=stdout_text,
-                stderr_text=stderr_text, artifact_files=artifact_files,
+                exit_code=exit_code,
+                stdout_text=stdout_text,
+                stderr_text=stderr_text,
+                artifact_files=artifact_files,
             )
 
             # 纪律 3：invalid 支持重试机制（可配置最大重试次数，耗尽才判定 invalid）
             if status == "invalid" and attempt < max_retries and not dry_run:
                 attempt += 1
-                retry_attempts.append({
-                    "attempt": attempt,
-                    "timestamp": datetime.now().isoformat(),
-                    "exit_code": exit_code,
-                    "failure_reason": failure_reason,
-                })
+                retry_attempts.append(
+                    {
+                        "attempt": attempt,
+                        "timestamp": datetime.now().isoformat(),
+                        "exit_code": exit_code,
+                        "failure_reason": failure_reason,
+                    }
+                )
                 retry_plain = {
                     "fatal_stderr_error": "模型运行环境出错了，正在自动重试",
                     "command_timeout": "这个实验跑超时了，正在重试",
@@ -1717,21 +1929,30 @@ def run_from_plan(
                 }.get(str(failure_reason or ""), f"实验遇到环境问题（{failure_reason}），正在重试")
                 LOGGER.warning(
                     "%s（第 %d/%d 次）: model=%s, mode=%s",
-                    retry_plain, attempt, max_retries, plan_item["model"],
+                    retry_plain,
+                    attempt,
+                    max_retries,
+                    plan_item["model"],
                     "with-skill" if use_skill else "without-skill",
                 )
                 import time
+
                 time.sleep(1.0)
                 continue
             break
 
         # 短执行时间检测
         wall_clock = execution_metrics.wall_clock_seconds or 0
-        if wall_clock < 10 and not artifact_files and success is False and status != "invalid":
+        if (
+            wall_clock < 10
+            and not artifact_files
+            and success is False
+            and status != "invalid"
+        ):
             status = "failure"
             failure_reason = "empty_product"
 
-        is_valid = (status != "invalid")
+        is_valid = status != "invalid"
 
         # 执行四类确定性断言判定 (零 LLM 调用)
         analysis_data: dict[str, Any] = {}
@@ -1739,13 +1960,16 @@ def run_from_plan(
         if assertions_config and is_valid and success:
             try:
                 from .assertions import AssertionEngine
+
                 assertion_eng = AssertionEngine()
                 artifacts_map = {}
                 for art_rel in artifact_files:
                     art_full = workspace_dir / art_rel
                     try:
                         if art_full.stat().st_size <= 500 * 1024:
-                            artifacts_map[art_rel] = art_full.read_text(encoding="utf-8", errors="replace")
+                            artifacts_map[art_rel] = art_full.read_text(
+                                encoding="utf-8", errors="replace"
+                            )
                     except Exception:
                         pass
                 suite_res = assertion_eng.evaluate_suite(
@@ -1759,15 +1983,27 @@ def run_from_plan(
                 if not suite_res.passed:
                     transcript_disk = ""
                     try:
-                        transcript_disk = transcript_file.read_text(encoding="utf-8", errors="replace") if transcript_file.exists() else ""
+                        transcript_disk = (
+                            transcript_file.read_text(
+                                encoding="utf-8", errors="replace"
+                            )
+                            if transcript_file.exists()
+                            else ""
+                        )
                     except Exception:
                         transcript_disk = ""
-                    if transcript_disk and transcript_disk.strip() != stdout_text.strip():
+                    if (
+                        transcript_disk
+                        and transcript_disk.strip() != stdout_text.strip()
+                    ):
                         retry_suite = assertion_eng.evaluate_suite(
                             assertions_config,
                             output_text=stdout_text + "\n" + transcript_disk,
                             artifacts=artifacts_map,
-                            context={"stdout": stdout_text, "model": plan_item["model"]},
+                            context={
+                                "stdout": stdout_text,
+                                "model": plan_item["model"],
+                            },
                         )
                         if retry_suite.passed or retry_suite.score > suite_res.score:
                             suite_res = retry_suite
@@ -1780,27 +2016,42 @@ def run_from_plan(
                 LOGGER.error("断言套件执行异常: %s", e)
 
         temp_result = ExperimentResult(
-            runner_name=resolve_config_host(config) or EXECUTION_MODE_DEFAULT_HOST.get(str(config.execution_mode or ""), "opencode"),
+            runner_name=resolve_config_host(config)
+            or EXECUTION_MODE_DEFAULT_HOST.get(
+                str(config.execution_mode or ""), "opencode"
+            ),
             model=plan_item["model"],
-            use_skill=plan_item["use_skill"], exit_code=exit_code,
-            success=success, status=status, failure_reason=failure_reason,
-            workspace_dir=str(workspace_dir), stdout_file=str(stdout_file),
-            stderr_file=str(stderr_file), transcript_file=str(transcript_file),
-            artifacts=artifact_files, analysis=analysis_data,
+            use_skill=plan_item["use_skill"],
+            exit_code=exit_code,
+            success=success,
+            status=status,
+            failure_reason=failure_reason,
+            workspace_dir=str(workspace_dir),
+            stdout_file=str(stdout_file),
+            stderr_file=str(stderr_file),
+            transcript_file=str(transcript_file),
+            artifacts=artifact_files,
+            analysis=analysis_data,
             repetition=int(plan_item.get("repetition", 1) or 1),
             execution_metrics=execution_metrics,
-            is_valid=is_valid, skill_loaded=skill_loaded, loading_evidence=loading_evidence,
+            is_valid=is_valid,
+            skill_loaded=skill_loaded,
+            loading_evidence=loading_evidence,
             retry_attempts=retry_attempts,
         )
         write_json(workspace_dir / "result.json", asdict(temp_result))
         return temp_result
 
-    def execute_one_with_progress(index: int, plan_item: dict[str, Any]) -> ExperimentResult:
+    def execute_one_with_progress(
+        index: int, plan_item: dict[str, Any]
+    ) -> ExperimentResult:
         model = plan_item["model"]
         mode = "with-skill" if plan_item["use_skill"] else "without-skill"
         repetition = int(plan_item.get("repetition", 1) or 1)
         task_id = f"experiment:{index}"
-        progress.task_started(task_id, f"{model} {mode} rep{repetition}", model=model, mode=mode)
+        progress.task_started(
+            task_id, f"{model} {mode} rep{repetition}", model=model, mode=mode
+        )
         result = execute_one(index, plan_item)
         progress.task_finished(
             task_id,
@@ -1822,7 +2073,11 @@ def run_from_plan(
             try:
                 existing = json.loads(result_file.read_text(encoding="utf-8"))
                 indexed_results[index] = ExperimentResult(
-                    runner_name=existing.get("runner_name") or resolve_config_host(config) or EXECUTION_MODE_DEFAULT_HOST.get(str(config.execution_mode or ""), "opencode"),
+                    runner_name=existing.get("runner_name")
+                    or resolve_config_host(config)
+                    or EXECUTION_MODE_DEFAULT_HOST.get(
+                        str(config.execution_mode or ""), "opencode"
+                    ),
                     model=existing["model"],
                     use_skill=existing["use_skill"],
                     exit_code=existing.get("exit_code", -1),
@@ -1830,19 +2085,35 @@ def run_from_plan(
                     status=existing.get("status", "unknown"),
                     failure_reason=existing.get("failure_reason"),
                     workspace_dir=existing.get("workspace_dir", str(workspace_dir)),
-                    stdout_file=existing.get("stdout_file", str(workspace_dir / "stdout.txt")),
-                    stderr_file=existing.get("stderr_file", str(workspace_dir / "stderr.txt")),
-                    transcript_file=existing.get("transcript_file", str(workspace_dir / "transcript.md")),
+                    stdout_file=existing.get(
+                        "stdout_file", str(workspace_dir / "stdout.txt")
+                    ),
+                    stderr_file=existing.get(
+                        "stderr_file", str(workspace_dir / "stderr.txt")
+                    ),
+                    transcript_file=existing.get(
+                        "transcript_file", str(workspace_dir / "transcript.md")
+                    ),
                     artifacts=existing.get("artifacts", []),
                     analysis=existing.get("analysis", {}),
-                    repetition=int(existing.get("repetition", plan_item.get("repetition", 1)) or 1),
-                    execution_metrics=ExecutionMetrics(
-                        start_time=existing.get("execution_metrics", {}).get("start_time"),
-                        end_time=existing.get("execution_metrics", {}).get("end_time"),
-                        wall_clock_seconds=existing.get("execution_metrics", {}).get("wall_clock_seconds"),
+                    repetition=int(
+                        existing.get("repetition", plan_item.get("repetition", 1)) or 1
                     ),
-                    is_valid=existing.get("is_valid", existing.get("status") != "invalid"),
-                    skill_loaded=existing.get("skill_loaded", bool(existing["use_skill"])),
+                    execution_metrics=ExecutionMetrics(
+                        start_time=existing.get("execution_metrics", {}).get(
+                            "start_time"
+                        ),
+                        end_time=existing.get("execution_metrics", {}).get("end_time"),
+                        wall_clock_seconds=existing.get("execution_metrics", {}).get(
+                            "wall_clock_seconds"
+                        ),
+                    ),
+                    is_valid=existing.get(
+                        "is_valid", existing.get("status") != "invalid"
+                    ),
+                    skill_loaded=existing.get(
+                        "skill_loaded", bool(existing["use_skill"])
+                    ),
                     loading_evidence=existing.get("loading_evidence", {}),
                     retry_attempts=existing.get("retry_attempts", []),
                 )
@@ -1856,7 +2127,9 @@ def run_from_plan(
                     success=existing.get("success", False),
                     status=existing.get("status", "unknown"),
                     artifacts=len(existing.get("artifacts", [])),
-                    wall_clock_seconds=existing.get("execution_metrics", {}).get("wall_clock_seconds", 0),
+                    wall_clock_seconds=existing.get("execution_metrics", {}).get(
+                        "wall_clock_seconds", 0
+                    ),
                 )
                 continue
             except Exception:
@@ -1865,7 +2138,10 @@ def run_from_plan(
 
     skipped_count = len(all_plans) - len(pending_plans)
     if skipped_count > 0:
-        print(f"  跳过 {skipped_count} 个已有结果的实验，剩余 {len(pending_plans)} 个待执行", flush=True)
+        print(
+            f"  跳过 {skipped_count} 个已有结果的实验，剩余 {len(pending_plans)} 个待执行",
+            flush=True,
+        )
     if not pending_plans:
         print(f"  所有实验均已完成，无需重新执行", flush=True)
 
@@ -1873,14 +2149,23 @@ def run_from_plan(
         for index, plan_item in pending_plans:
             model = plan_item["model"]
             mode = "with-skill" if plan_item["use_skill"] else "without-skill"
-            print(f"  [{len(indexed_results) + 1}/{len(all_plans)}] 执行: {model} ({mode})...", flush=True)
+            print(
+                f"  [{len(indexed_results) + 1}/{len(all_plans)}] 执行: {model} ({mode})...",
+                flush=True,
+            )
             indexed_results[index] = execute_one_with_progress(index, plan_item)
             status = "✅" if indexed_results[index].success else "❌"
             wall = indexed_results[index].execution_metrics.wall_clock_seconds or 0
-            print(f"  [{len(indexed_results)}/{len(all_plans)}] {status} 完成: {model} ({mode}), {wall:.0f}s", flush=True)
+            print(
+                f"  [{len(indexed_results)}/{len(all_plans)}] {status} 完成: {model} ({mode}), {wall:.0f}s",
+                flush=True,
+            )
     else:
         total_to_run = len(pending_plans)
-        print(f"  并发数: {max_workers}, 共 {total_to_run} 个待执行实验（{skipped_count} 个已跳过）", flush=True)
+        print(
+            f"  并发数: {max_workers}, 共 {total_to_run} 个待执行实验（{skipped_count} 个已跳过）",
+            flush=True,
+        )
         completed = 0
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_index = {
@@ -1893,27 +2178,39 @@ def run_from_plan(
                 completed += 1
                 result = indexed_results[index]
                 model = all_plans[index]["model"]
-                mode = "with-skill" if all_plans[index]["use_skill"] else "without-skill"
+                mode = (
+                    "with-skill" if all_plans[index]["use_skill"] else "without-skill"
+                )
                 status = "✅" if result.success else "❌"
                 wall = result.execution_metrics.wall_clock_seconds or 0
-                print(f"  [{completed + skipped_count}/{len(all_plans)}] {status} {model} ({mode}), {wall:.0f}s", flush=True)
+                print(
+                    f"  [{completed + skipped_count}/{len(all_plans)}] {status} {model} ({mode}), {wall:.0f}s",
+                    flush=True,
+                )
 
     results = [indexed_results[index] for index in sorted(indexed_results)]
     skill_promises = _extract_skill_promises(str(config.target_skill_path))
-    write_json(plan_dir / "run_manifest.json", {
-        "evaluation_name": config.evaluation_name,
-        "target_skill": config.target_skill,
-        "target_skill_path": str(config.target_skill_path),
-        "task_prompt": config.task_prompt,
-        "skill_promises": skill_promises,
-        "repetitions": config.repetitions,
-        "host": resolve_config_host(config) or EXECUTION_MODE_DEFAULT_HOST.get(str(config.execution_mode or ""), "opencode"),
-        "results": [asdict(item) for item in results],
-    })
+    write_json(
+        plan_dir / "run_manifest.json",
+        {
+            "evaluation_name": config.evaluation_name,
+            "target_skill": config.target_skill,
+            "target_skill_path": str(config.target_skill_path),
+            "task_prompt": config.task_prompt,
+            "skill_promises": skill_promises,
+            "repetitions": config.repetitions,
+            "host": resolve_config_host(config)
+            or EXECUTION_MODE_DEFAULT_HOST.get(
+                str(config.execution_mode or ""), "opencode"
+            ),
+            "results": [asdict(item) for item in results],
+        },
+    )
 
     # P1: 同模型配对增益统计、判定快照与人审触发记录落盘（零 LLM）
     try:
         from .paired_gain import rebuild_p1_outputs
+
         rebuild_p1_outputs(plan_dir)
         LOGGER.info("P1 配对增益统计已落盘: %s", plan_dir / "p1")
     except Exception as e:
@@ -1922,30 +2219,38 @@ def run_from_plan(
     # 判定器版本固定与快照落盘 (assertions_snapshot.json)
     try:
         from .assertions import AssertionEngine, save_assertions_snapshot
+
         assertion_engine = AssertionEngine()
         assertion_records = []
         for res in results:
             stdout_content = ""
             if Path(res.stdout_file).exists():
                 try:
-                    stdout_content = Path(res.stdout_file).read_text(encoding="utf-8", errors="replace")
+                    stdout_content = Path(res.stdout_file).read_text(
+                        encoding="utf-8", errors="replace"
+                    )
                 except Exception:
                     pass
-            assertion_records.append({
-                "model": res.model,
-                "use_skill": res.use_skill,
-                "repetition": res.repetition,
-                "status": res.status,
-                "success": res.success,
-                "is_valid": res.is_valid,
-                "output_text": stdout_content,
-                "artifacts": {a: "" for a in res.artifacts},
-                "results": res.analysis.get("assertions", {}).get("results", []),
-            })
+            assertion_records.append(
+                {
+                    "model": res.model,
+                    "use_skill": res.use_skill,
+                    "repetition": res.repetition,
+                    "status": res.status,
+                    "success": res.success,
+                    "is_valid": res.is_valid,
+                    "output_text": stdout_content,
+                    "artifacts": {a: "" for a in res.artifacts},
+                    "results": res.analysis.get("assertions", {}).get("results", []),
+                }
+            )
         snapshot_data = assertion_engine.create_snapshot(
             rules=config.evaluation_contract.get("validation_assertions", []),
             records=assertion_records,
-            metadata={"evaluation_name": config.evaluation_name, "plan_dir": str(plan_dir)},
+            metadata={
+                "evaluation_name": config.evaluation_name,
+                "plan_dir": str(plan_dir),
+            },
         )
         save_assertions_snapshot(snapshot_data, plan_dir / "assertions_snapshot.json")
     except Exception as e:
@@ -1965,7 +2270,12 @@ def run_from_plan(
             progress.start_stage("生成洞察", 1)
             progress.task_started("summary:insight", "生成洞察结论")
             try:
-                run_summary_stage(plan_dir, config.summary_model, execution_mode=config.execution_mode, host=resolve_config_host(config))
+                run_summary_stage(
+                    plan_dir,
+                    config.summary_model,
+                    execution_mode=config.execution_mode,
+                    host=resolve_config_host(config),
+                )
                 progress.task_finished("summary:insight", True)
             except Exception as e:
                 LOGGER.error("生成洞察失败: %s", e)
@@ -1986,7 +2296,13 @@ def _extract_skill_promises(skill_path: str) -> dict[str, Any]:
 
     skill_md_path = Path(skill_path) / "SKILL.md"
     if not skill_md_path.exists():
-        return {"skill_name": "", "promises": [], "output_files": [], "phases": [], "evaluation_dimensions": {}}
+        return {
+            "skill_name": "",
+            "promises": [],
+            "output_files": [],
+            "phases": [],
+            "evaluation_dimensions": {},
+        }
 
     content = skill_md_path.read_text(encoding="utf-8", errors="replace")
 
@@ -2002,7 +2318,16 @@ def _extract_skill_promises(skill_path: str) -> dict[str, Any]:
         phase_name = match.group(2).strip()
         phases.append(f"Phase {phase_num}: {phase_name}")
 
-    constraint_keywords = ["必须", "禁止", "不得", "不能", "确保", "限制", "强制", "一定"]
+    constraint_keywords = [
+        "必须",
+        "禁止",
+        "不得",
+        "不能",
+        "确保",
+        "限制",
+        "强制",
+        "一定",
+    ]
     constraint_pattern = rf"({'|'.join(constraint_keywords)})[^\n]{{2,100}}"
     constraints = []
     for match in re.finditer(constraint_pattern, content):
@@ -2084,31 +2409,39 @@ def _generate_default_evaluation_dimensions(content: str) -> list[dict[str, Any]
 
     dims = []
 
-    dims.append({
-        "name": "用户需求满足度",
-        "weight": 40,
-        "verification": "验证输出是否真正回答了用户的问题。"
-    })
+    dims.append(
+        {
+            "name": "用户需求满足度",
+            "weight": 40,
+            "verification": "验证输出是否真正回答了用户的问题。",
+        }
+    )
 
     if has_phases:
-        dims.append({
-            "name": "流程合规性",
-            "weight": 25,
-            "verification": "验证是否按 skill 承诺的流程执行了所有阶段。"
-        })
+        dims.append(
+            {
+                "name": "流程合规性",
+                "weight": 25,
+                "verification": "验证是否按 skill 承诺的流程执行了所有阶段。",
+            }
+        )
 
     if has_constraints:
-        dims.append({
-            "name": "规范遵守度",
-            "weight": 15,
-            "verification": "验证是否遵守了 skill 定义的约束规则。"
-        })
+        dims.append(
+            {
+                "name": "规范遵守度",
+                "weight": 15,
+                "verification": "验证是否遵守了 skill 定义的约束规则。",
+            }
+        )
 
-    dims.append({
-        "name": "产出内容质量",
-        "weight": 20 if len(dims) == 2 else 20 - (15 if has_constraints else 0),
-        "verification": "读取产出文件内容，验证质量。"
-    })
+    dims.append(
+        {
+            "name": "产出内容质量",
+            "weight": 20 if len(dims) == 2 else 20 - (15 if has_constraints else 0),
+            "verification": "读取产出文件内容，验证质量。",
+        }
+    )
 
     total_weight = sum(d["weight"] for d in dims)
     if total_weight != 100:
@@ -2123,10 +2456,21 @@ def _generate_default_evaluation_dimensions(content: str) -> list[dict[str, Any]
 def _summarize_skill_for_judge(content: str) -> str:
     """为评委生成 skill 的简洁摘要"""
     import re
+
     lines = content.split("\n")
     important_lines = []
 
-    skip_sections = {"#", "##", "---", "```", "name:", "version:", "description:", "triggers:", "tools_required:"}
+    skip_sections = {
+        "#",
+        "##",
+        "---",
+        "```",
+        "name:",
+        "version:",
+        "description:",
+        "triggers:",
+        "tools_required:",
+    }
     skip_keywords = ["...", "<!--", "*/", "*/", "---"]
 
     for line in lines:
@@ -2160,7 +2504,6 @@ class BlindEvaluationResult:
     voting_model: str
     pair_model: str
     evaluations: list[dict]
-
 
 
 def collect_blind_vote_pairs(run_dir: Path) -> list[BlindVotePair]:
@@ -2247,7 +2590,16 @@ def conduct_blind_vote(
     host: str | None = None,
 ) -> list[BlindEvaluationResult]:
     """执行批量盲评：评委一次性看所有方案并分发N票（经统一宿主调度层）。"""
-    return _conduct_batch_vote(pairs, voting_models, task_prompt, timeout_seconds, parallelism, progress, execution_mode, host)
+    return _conduct_batch_vote(
+        pairs,
+        voting_models,
+        task_prompt,
+        timeout_seconds,
+        parallelism,
+        progress,
+        execution_mode,
+        host,
+    )
 
 
 def _conduct_batch_vote(
@@ -2269,26 +2621,44 @@ def _conduct_batch_vote(
     - 评委必须评价每个候选方案，但只给认为最好的方案投票
     """
     import random
+
     # 构建所有候选方案
     all_options = []
     option_labels = []  # 存储打乱的label->workspace映射
-    labels = ["方案A", "方案B", "方案C", "方案D", "方案E",
-              "方案F", "方案G", "方案H", "方案I", "方案J"]
+    labels = [
+        "方案A",
+        "方案B",
+        "方案C",
+        "方案D",
+        "方案E",
+        "方案F",
+        "方案G",
+        "方案H",
+        "方案I",
+        "方案J",
+    ]
 
     for i, pair in enumerate(pairs):
-        for mode, path in [("with", pair.with_skill_workspace), ("without", pair.without_skill_workspace)]:
+        for mode, path in [
+            ("with", pair.with_skill_workspace),
+            ("without", pair.without_skill_workspace),
+        ]:
             if not path:
                 continue
-            all_options.append({
-                "original_idx": i,
-                "mode": mode,
-                "workspace": path,
-            })
+            all_options.append(
+                {
+                    "original_idx": i,
+                    "mode": mode,
+                    "workspace": path,
+                }
+            )
 
     if not all_options:
         LOGGER.warning("批量盲评没有可评审的用户验收产物方案")
         return []
-    votes_per_judge = min(len(pairs), len(all_options))  # 每位评委最多N票，且不能超过实际候选方案数。
+    votes_per_judge = min(
+        len(pairs), len(all_options)
+    )  # 每位评委最多N票，且不能超过实际候选方案数。
 
     jobs: list[tuple[str, list[dict], dict[str, dict]]] = []
     for voting_model in voting_models:
@@ -2308,24 +2678,38 @@ def _conduct_batch_vote(
     max_workers = min(max(1, int(parallelism or 1)), len(jobs)) if jobs else 1
     if progress:
         progress.start_stage("盲评", len(jobs))
-    print(f"  批量盲评模式: 每个评委最多 {votes_per_judge} 票, 共 {len(jobs)} 个评委", flush=True)
+    print(
+        f"  批量盲评模式: 每个评委最多 {votes_per_judge} 票, 共 {len(jobs)} 个评委",
+        flush=True,
+    )
 
     def run_batch_job(
-        voting_model: str,
-        options: list[dict],
-        label_to_option: dict[str, dict]
+        voting_model: str, options: list[dict], label_to_option: dict[str, dict]
     ) -> BlindEvaluationResult | None:
         task_id = f"batch_review:{voting_model}"
         label = f"{voting_model} 批量评审"
         if progress:
-            progress.task_started(task_id, label, voting_model=voting_model, model="batch")
+            progress.task_started(
+                task_id, label, voting_model=voting_model, model="batch"
+            )
         print(f"  ⏳ 正在批量评审: {voting_model}", flush=True)
 
-        eval_prompt = _build_batch_eval_prompt(options, label_to_option, votes_per_judge, task_prompt)
-        result = _execute_batch_eval_command(voting_model, eval_prompt, label_to_option, timeout_seconds, execution_mode, host)
+        eval_prompt = _build_batch_eval_prompt(
+            options, label_to_option, votes_per_judge, task_prompt
+        )
+        result = _execute_batch_eval_command(
+            voting_model,
+            eval_prompt,
+            label_to_option,
+            timeout_seconds,
+            execution_mode,
+            host,
+        )
 
         if progress:
-            progress.task_finished(task_id, bool(result), voting_model=voting_model, model="batch")
+            progress.task_finished(
+                task_id, bool(result), voting_model=voting_model, model="batch"
+            )
         return result
 
     results: list[BlindEvaluationResult] = []
@@ -2360,7 +2744,15 @@ def _build_batch_eval_prompt(
     # 构建所有方案的证据
     evidence_sections = []
     for j, opt in enumerate(options):
-        label = label_to_option[str(opt.get("workspace", ""))] if False else list(label_to_option.keys())[j] if j < len(label_to_option) else f"方案{chr(65+j)}"
+        label = (
+            label_to_option[str(opt.get("workspace", ""))]
+            if False
+            else (
+                list(label_to_option.keys())[j]
+                if j < len(label_to_option)
+                else f"方案{chr(65+j)}"
+            )
+        )
         for lbl, info in label_to_option.items():
             if info["workspace"] == opt["workspace"]:
                 label = lbl
@@ -2464,26 +2856,33 @@ def _execute_batch_eval_command(
         return BlindEvaluationResult(
             voting_model=voting_model,
             pair_model="batch",
-            evaluations=[{
-                "votes": parsed_vote["votes"],
-                "reasons": parsed_vote["reasons"],
-                "all_evaluations": parsed_vote.get("all_evaluations", {}),
-                "overall": parsed_vote["overall"],
-                "workspace_votes": {v: label_to_option.get(v, {}).get("workspace", "") for v in parsed_vote["votes"]},
-                "workspace_evaluations": {
-                    label: label_to_option.get(label, {}).get("workspace", "")
-                    for label in label_to_option.keys()
-                },
-                "missing_evaluation_labels": missing_evaluations,
-                "raw_output": raw_text[:80000],
-            }],
+            evaluations=[
+                {
+                    "votes": parsed_vote["votes"],
+                    "reasons": parsed_vote["reasons"],
+                    "all_evaluations": parsed_vote.get("all_evaluations", {}),
+                    "overall": parsed_vote["overall"],
+                    "workspace_votes": {
+                        v: label_to_option.get(v, {}).get("workspace", "")
+                        for v in parsed_vote["votes"]
+                    },
+                    "workspace_evaluations": {
+                        label: label_to_option.get(label, {}).get("workspace", "")
+                        for label in label_to_option.keys()
+                    },
+                    "missing_evaluation_labels": missing_evaluations,
+                    "raw_output": raw_text[:80000],
+                }
+            ],
         )
     except Exception as e:
         LOGGER.error("批量盲评执行失败: %s", e)
         return None
 
 
-def _parse_batch_vote_payload(text: str, label_to_option: dict[str, dict]) -> dict[str, Any]:
+def _parse_batch_vote_payload(
+    text: str, label_to_option: dict[str, dict]
+) -> dict[str, Any]:
     """解析批量投票结果，保留投票、理由和总体评价。"""
     try:
         obj = _extract_json_object_from_text(text)
@@ -2530,7 +2929,12 @@ def _parse_batch_vote_payload(text: str, label_to_option: dict[str, dict]) -> di
                 if label not in reasons and label in all_evaluations:
                     reasons[label] = all_evaluations[label]
             overall = obj.get("总体评价", obj.get("overall", ""))
-            return {"votes": valid_votes, "reasons": reasons, "all_evaluations": all_evaluations, "overall": str(overall or "")}
+            return {
+                "votes": valid_votes,
+                "reasons": reasons,
+                "all_evaluations": all_evaluations,
+                "overall": str(overall or ""),
+            }
     except Exception:
         pass
     return {"votes": [], "reasons": {}, "all_evaluations": {}, "overall": ""}
@@ -2546,23 +2950,92 @@ def _parse_batch_votes(text: str, label_to_option: dict[str, dict]) -> list[str]
 # ============================================================
 
 BINARY_EXTENSIONS = {
-    ".xlsx", ".xls", ".csv", ".pdf", ".png", ".jpg", ".jpeg",
-    ".gif", ".bmp", ".ico", ".zip", ".tar", ".gz", ".rar",
-    ".docx", ".doc", ".pptx", ".ppt", ".msg",
-    ".eot", ".woff", ".woff2", ".ttf", ".otf",
-    ".exe", ".dmg", ".app", ".dll", ".so",
-    ".mp3", ".mp4", ".avi", ".mov", ".mkv", ".wav",
-    ".pyc", ".pyo", ".class", ".jar",
-    ".db", ".sqlite", ".sqlite3",
+    ".xlsx",
+    ".xls",
+    ".csv",
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".bmp",
+    ".ico",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".rar",
+    ".docx",
+    ".doc",
+    ".pptx",
+    ".ppt",
+    ".msg",
+    ".eot",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".exe",
+    ".dmg",
+    ".app",
+    ".dll",
+    ".so",
+    ".mp3",
+    ".mp4",
+    ".avi",
+    ".mov",
+    ".mkv",
+    ".wav",
+    ".pyc",
+    ".pyo",
+    ".class",
+    ".jar",
+    ".db",
+    ".sqlite",
+    ".sqlite3",
 }
 
 TEXT_EXTENSIONS = {
-    ".txt", ".md", ".markdown", ".html", ".htm", ".css", ".js", ".ts",
-    ".jsx", ".tsx", ".json", ".yaml", ".yml", ".toml", ".xml",
-    ".py", ".sh", ".bash", ".zsh", ".fish",
-    ".c", ".cpp", ".h", ".hpp", ".java", ".go", ".rs", ".rb",
-    ".php", ".pl", ".pm", ".r", ".sql", ". graphql",
-    ".env", ".ini", ".cfg", ".conf", ".log", ".diff", ".patch",
+    ".txt",
+    ".md",
+    ".markdown",
+    ".html",
+    ".htm",
+    ".css",
+    ".js",
+    ".ts",
+    ".jsx",
+    ".tsx",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".xml",
+    ".py",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".fish",
+    ".c",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".java",
+    ".go",
+    ".rs",
+    ".rb",
+    ".php",
+    ".pl",
+    ".pm",
+    ".r",
+    ".sql",
+    ". graphql",
+    ".env",
+    ".ini",
+    ".cfg",
+    ".conf",
+    ".log",
+    ".diff",
+    ".patch",
 }
 
 
@@ -2571,18 +3044,18 @@ _EVIDENCE_BUNDLE_MAX_CHARS = 60_000
 
 # 不同类型文件的单文件读取上限
 _FILE_CHAR_LIMITS = {
-    ".md": 15_000,   # 报告类文件，需要较完整内容
+    ".md": 15_000,  # 报告类文件，需要较完整内容
     ".json": 12_000,  # 结构化数据，通常需要完整阅读
-    ".txt": 12_000,   # 文本文件
+    ".txt": 12_000,  # 文本文件
     ".html": 10_000,  # HTML 页面
-    ".csv": 8_000,    # CSV 数据
-    ".sql": 8_000,    # SQL 脚本
-    ".py": 8_000,     # Python 代码
-    ".js": 8_000,     # JavaScript 代码
-    ".ts": 8_000,     # TypeScript 代码
-    ".tsx": 8_000,    # TSX 组件
-    ".jsx": 8_000,    # JSX 组件
-    ".vue": 8_000,    # Vue 组件
+    ".csv": 8_000,  # CSV 数据
+    ".sql": 8_000,  # SQL 脚本
+    ".py": 8_000,  # Python 代码
+    ".js": 8_000,  # JavaScript 代码
+    ".ts": 8_000,  # TypeScript 代码
+    ".tsx": 8_000,  # TSX 组件
+    ".jsx": 8_000,  # JSX 组件
+    ".vue": 8_000,  # Vue 组件
     ".yaml": 6_000,
     ".yml": 6_000,
     ".toml": 6_000,
@@ -2610,6 +3083,7 @@ def _try_read_file(f: Path, max_chars: int = 0) -> str:
         if ext == ".xlsx":
             try:
                 import openpyxl
+
                 wb = openpyxl.load_workbook(f, data_only=True)
                 lines = []
                 for sheet in wb.sheetnames:
@@ -2617,7 +3091,9 @@ def _try_read_file(f: Path, max_chars: int = 0) -> str:
                     lines.append(f"=== Sheet: {sheet} ===")
                     for row in ws.iter_rows(max_row=50, values_only=True):
                         if any(cell is not None for cell in row):
-                            lines.append(" | ".join(str(c) if c is not None else "" for c in row))
+                            lines.append(
+                                " | ".join(str(c) if c is not None else "" for c in row)
+                            )
                     lines.append("")
                 return "\n".join(lines)[:limit]
             except ImportError:
@@ -2628,6 +3104,7 @@ def _try_read_file(f: Path, max_chars: int = 0) -> str:
         if ext in (".csv",):
             try:
                 import csv
+
                 lines = []
                 with open(f, newline="", encoding="utf-8", errors="replace") as fp:
                     reader = csv.reader(fp)
@@ -2643,15 +3120,28 @@ def _try_read_file(f: Path, max_chars: int = 0) -> str:
         if ext == ".pptx":
             try:
                 import xml.etree.ElementTree as ET
+
                 lines = []
                 with zipfile.ZipFile(f) as zf:
                     slide_names = sorted(
-                        [n for n in zf.namelist() if n.startswith("ppt/slides/slide") and n.endswith(".xml")],
-                        key=lambda n: int(re.search(r"slide(\d+)\.xml", n).group(1)) if re.search(r"slide(\d+)\.xml", n) else 0,
+                        [
+                            n
+                            for n in zf.namelist()
+                            if n.startswith("ppt/slides/slide") and n.endswith(".xml")
+                        ],
+                        key=lambda n: (
+                            int(re.search(r"slide(\d+)\.xml", n).group(1))
+                            if re.search(r"slide(\d+)\.xml", n)
+                            else 0
+                        ),
                     )
                     for idx, name in enumerate(slide_names[:30], 1):
                         root = ET.fromstring(zf.read(name))
-                        texts = [node.text or "" for node in root.iter() if node.tag.endswith("}t") or node.tag == "t"]
+                        texts = [
+                            node.text or ""
+                            for node in root.iter()
+                            if node.tag.endswith("}t") or node.tag == "t"
+                        ]
                         clean = " ".join(t.strip() for t in texts if t and t.strip())
                         lines.append(f"Slide {idx}: {clean or '[未提取到文本]'}")
                 return "\n".join(lines)[:limit]
@@ -2666,7 +3156,9 @@ def _try_read_file(f: Path, max_chars: int = 0) -> str:
         return f"[文本文件读取失败，大小: {f.stat().st_size} 字节]"
 
 
-def _build_evidence_bundle(workspace_dir: str, task_prompt: str = "", target_skill: str = "") -> str:
+def _build_evidence_bundle(
+    workspace_dir: str, task_prompt: str = "", target_skill: str = ""
+) -> str:
     if not workspace_dir:
         return ""
 
@@ -2675,20 +3167,29 @@ def _build_evidence_bundle(workspace_dir: str, task_prompt: str = "", target_ski
         return "[artifacts 目录不存在]"
 
     parts = []
-    selection = select_result_files(workspace_dir, task_prompt=task_prompt, target_skill=target_skill)
+    selection = select_result_files(
+        workspace_dir, task_prompt=task_prompt, target_skill=target_skill
+    )
     result_files = selection.get("validated_result_files", []) or []
     missing = selection.get("missing_required_outputs", []) or []
 
     parts.append("## 评委可评价对象\n")
-    parts.append("只允许评价下方 validated_result_files 的实际结果文件内容。summary、execution_trace、日志、脚本、图片素材和中间文件没有提供给你作为评分依据。\n")
+    parts.append(
+        "只允许评价下方 validated_result_files 的实际结果文件内容。summary、execution_trace、日志、脚本、图片素材和中间文件没有提供给你作为评分依据。\n"
+    )
     if missing:
         parts.append("### 缺失的必需结果文件\n")
         for item in missing:
-            parts.append(f"- {item.get('label', '结果文件')} ({item.get('ext', '')}): {item.get('reason', '')}")
+            parts.append(
+                f"- {item.get('label', '结果文件')} ({item.get('ext', '')}): {item.get('reason', '')}"
+            )
         parts.append("")
 
     if not result_files:
-        return "\n".join(parts) + "\n[未找到可验证的最终结果文件；该方案应按未交付最终产物处理。]"
+        return (
+            "\n".join(parts)
+            + "\n[未找到可验证的最终结果文件；该方案应按未交付最终产物处理。]"
+        )
 
     bundle_chars = sum(len(p) for p in parts)
 
@@ -2722,37 +3223,45 @@ def _build_evidence_bundle(workspace_dir: str, task_prompt: str = "", target_ski
 
 
 def _extract_json_object_from_text(text: str) -> dict[str, Any] | None:
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.IGNORECASE | re.DOTALL)
-    candidates = [fenced.group(1)] if fenced else []
+    def _generate_candidates() -> Generator[str, None, None]:
+        fenced = re.search(
+            r"```(?:json)?\s*(\{.*?\})\s*```", text, re.IGNORECASE | re.DOTALL
+        )
+        if fenced:
+            yield fenced.group(1)
 
-    start = text.find("{")
-    while start != -1:
-        depth = 0
-        in_string = False
-        escape = False
-        for idx in range(start, len(text)):
-            char = text[idx]
-            if escape:
-                escape = False
-                continue
-            if char == "\\":
-                escape = True
-                continue
-            if char == '"':
-                in_string = not in_string
-                continue
-            if in_string:
-                continue
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    candidates.append(text[start:idx + 1])
-                    break
-        start = text.find("{", start + 1)
+        start = text.find("{")
+        while start != -1:
+            depth = 0
+            in_string = False
+            escape = False
+            for idx in range(start, len(text)):
+                char = text[idx]
+                if escape:
+                    escape = False
+                    continue
+                if char == "\\":
+                    escape = True
+                    continue
+                if char == '"':
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        yield text[start : idx + 1]
+                        break
+            start = text.find("{", start + 1)
 
-    for candidate in candidates:
+    seen = set()
+    for candidate in _generate_candidates():
+        if candidate in seen:
+            continue
+        seen.add(candidate)
         try:
             parsed = json.loads(candidate)
             if isinstance(parsed, dict):
@@ -2778,18 +3287,22 @@ def _aggregate_batch_vote_results(
             workspace_to_info[pair.with_skill_workspace] = {
                 "model": pair.model,
                 "repetition": pair.repetition,
-                "mode": "with"
+                "mode": "with",
             }
         if pair.without_skill_workspace:
             workspace_to_info[pair.without_skill_workspace] = {
                 "model": pair.model,
                 "repetition": pair.repetition,
-                "mode": "without"
+                "mode": "without",
             }
 
     # 统计每个 (model, repetition, mode) 组合的得票数
-    vote_counts: dict[tuple[str, int], dict[str, int]] = {}  # (model, repetition) -> mode -> votes
-    judge_reasons: dict[tuple[str, int], dict[str, list]] = {}  # (model, repetition) -> mode -> reasons
+    vote_counts: dict[tuple[str, int], dict[str, int]] = (
+        {}
+    )  # (model, repetition) -> mode -> votes
+    judge_reasons: dict[tuple[str, int], dict[str, list]] = (
+        {}
+    )  # (model, repetition) -> mode -> reasons
     judge_summaries: list[str] = []
     raw_outputs: list[str] = []
     stats: dict[str, Any] = {}
@@ -2826,13 +3339,17 @@ def _aggregate_batch_vote_results(
                 vote_counts[key][mode] += 1
 
                 # 记录理由
-                reason = reasons.get(vote_label, "") if isinstance(reasons, dict) else ""
+                reason = (
+                    reasons.get(vote_label, "") if isinstance(reasons, dict) else ""
+                )
                 if reason:
                     judge_reasons[key][mode].append(reason)
 
             # 记录所有有产物方案的逐方案评价。未投票但有评价的方案也会进入 reasons，
             # 报告可据此展示“未获票但被评委评价”的说明。
-            if isinstance(all_evaluations, dict) and isinstance(workspace_evaluations, dict):
+            if isinstance(all_evaluations, dict) and isinstance(
+                workspace_evaluations, dict
+            ):
                 for label, evaluation in all_evaluations.items():
                     evaluation_text = str(evaluation or "").strip()
                     if not evaluation_text:
@@ -2877,7 +3394,9 @@ def _aggregate_batch_vote_results(
             "with_reasons": reasons["with"][:3] if reasons["with"] else [],
             "without_reasons": reasons["without"][:3] if reasons["without"] else [],
             "final_reasons": judge_summaries[:3],
-            "key_differences": _build_batch_key_differences(reasons["with"], reasons["without"]),
+            "key_differences": _build_batch_key_differences(
+                reasons["with"], reasons["without"]
+            ),
             "raw_outputs": raw_outputs[:3],
             "num_evaluations": len(eval_results),
             "skill_helped": counts["with"] > counts["without"],
@@ -2887,8 +3406,14 @@ def _aggregate_batch_vote_results(
         # 跨重复汇总到模型层（第二层指标）
         agg = model_stats.setdefault(
             pair.model,
-            {"with": 0, "without": 0, "repetitions": 0, "helped_reps": 0,
-             "with_reasons": [], "without_reasons": []},
+            {
+                "with": 0,
+                "without": 0,
+                "repetitions": 0,
+                "helped_reps": 0,
+                "with_reasons": [],
+                "without_reasons": [],
+            },
         )
         agg["with"] += counts["with"]
         agg["without"] += counts["without"]
@@ -2910,11 +3435,15 @@ def _aggregate_batch_vote_results(
             "ties": 0,
             "total_votes": total_votes,
             "with_pct": round(agg["with"] / total_votes * 100, 1) if total_votes else 0,
-            "without_pct": round(agg["without"] / total_votes * 100, 1) if total_votes else 0,
+            "without_pct": (
+                round(agg["without"] / total_votes * 100, 1) if total_votes else 0
+            ),
             "with_reasons": agg["with_reasons"][:3],
             "without_reasons": agg["without_reasons"][:3],
             "final_reasons": judge_summaries[:3],
-            "key_differences": _build_batch_key_differences(agg["with_reasons"], agg["without_reasons"]),
+            "key_differences": _build_batch_key_differences(
+                agg["with_reasons"], agg["without_reasons"]
+            ),
             "raw_outputs": raw_outputs[:3],
             "num_evaluations": len(eval_results),
             "skill_helped": agg["with"] > agg["without"],
@@ -2928,10 +3457,14 @@ def _aggregate_batch_vote_results(
     return stats
 
 
-def _build_batch_key_differences(with_reasons: list[str], without_reasons: list[str]) -> list[str]:
+def _build_batch_key_differences(
+    with_reasons: list[str], without_reasons: list[str]
+) -> list[str]:
     differences: list[str] = []
     if with_reasons and without_reasons:
-        differences.append(f"使用 skill 获票原因：{with_reasons[0]}；不使用 skill 获票原因：{without_reasons[0]}")
+        differences.append(
+            f"使用 skill 获票原因：{with_reasons[0]}；不使用 skill 获票原因：{without_reasons[0]}"
+        )
     elif with_reasons:
         differences.append(f"主要投给使用 skill 的原因：{with_reasons[0]}")
     elif without_reasons:
@@ -2978,8 +3511,12 @@ def run_blind_vote_phase(
         config_snapshot_path = run_dir / "config.snapshot.json"
         if config_snapshot_path.exists():
             try:
-                config_snapshot = json.loads(config_snapshot_path.read_text(encoding="utf-8"))
-                execution_mode = str(config_snapshot.get("execution_mode") or "cli-attach")
+                config_snapshot = json.loads(
+                    config_snapshot_path.read_text(encoding="utf-8")
+                )
+                execution_mode = str(
+                    config_snapshot.get("execution_mode") or "cli-attach"
+                )
             except Exception:
                 execution_mode = "cli-attach"
         else:
@@ -2989,7 +3526,11 @@ def run_blind_vote_phase(
         manifest = json.loads(manifest_path.read_text())
         task_prompt = manifest.get("task_prompt", manifest.get("target_skill", ""))
 
-    print(f"📝 任务: {task_prompt[:80]}..." if len(task_prompt) > 80 else f"📝 任务: {task_prompt}")
+    print(
+        f"📝 任务: {task_prompt[:80]}..."
+        if len(task_prompt) > 80
+        else f"📝 任务: {task_prompt}"
+    )
     print(f"\n📝 开始盲评（{len(voting_models)} 个评委模型）...")
 
     eval_results = conduct_blind_vote(
@@ -3017,8 +3558,12 @@ def run_blind_vote_phase(
         rep_note = f"（{helped_reps}/{reps} 个重复轮次 with 更优）" if reps else ""
         status = "✅ skill有帮助" if stat["skill_helped"] else "❌ skill无明显帮助"
         print(f"\n   {model} {rep_note}:")
-        print(f"      With-Skill 得票: {stat.get('with_votes', 0)}票 ({stat.get('with_pct', 0)}%)")
-        print(f"      Without-Skill 得票: {stat.get('without_votes', 0)}票 ({stat.get('without_pct', 0)}%)")
+        print(
+            f"      With-Skill 得票: {stat.get('with_votes', 0)}票 ({stat.get('with_pct', 0)}%)"
+        )
+        print(
+            f"      Without-Skill 得票: {stat.get('without_votes', 0)}票 ({stat.get('without_pct', 0)}%)"
+        )
         print(f"      {status}")
 
     blind_vote_dir = run_dir / "blind_vote"
@@ -3028,16 +3573,21 @@ def run_blind_vote_phase(
     write_json(blind_vote_dir / "evaluations.json", [asdict(vr) for vr in eval_results])
     write_json(blind_vote_dir / "stats.json", stats)
     write_json(blind_vote_dir / "pair_stats.json", pair_stats)
-    write_json(blind_vote_dir / "config.json", {
-        "blind_review_required": True,
-        "voting_models": voting_models,
-        "execution_mode": execution_mode,
-        "host": host or EXECUTION_MODE_DEFAULT_HOST.get(str(execution_mode or ""), "opencode"),
-    })
+    write_json(
+        blind_vote_dir / "config.json",
+        {
+            "blind_review_required": True,
+            "voting_models": voting_models,
+            "execution_mode": execution_mode,
+            "host": host
+            or EXECUTION_MODE_DEFAULT_HOST.get(str(execution_mode or ""), "opencode"),
+        },
+    )
 
     # P1: 盲评完成后重建配对增益统计（含评委一致率与人审触发记录）
     try:
         from .paired_gain import rebuild_p1_outputs
+
         rebuild_p1_outputs(run_dir)
     except Exception as e:
         LOGGER.error("P1 配对增益统计重建失败: %s", e)
