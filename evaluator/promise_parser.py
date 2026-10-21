@@ -22,7 +22,7 @@ _STEP_PATTERNS = [
 ]
 
 _CONSTRAINT_PATTERNS = [
-    re.compile(r"(?:必须|禁止|不得|不能|确保|避免|限制).*?([^\n。]{{5,100}})"),
+    re.compile(r"(?:必须|禁止|不得|不能|确保|避免|限制).*?([^\n。]{5,100})"),
 ]
 
 # Patterns for sections and behaviors that previously were compiled dynamically in loops
@@ -137,22 +137,22 @@ def _extract_file_promises(content: str) -> list[FilePromise]:
                 continue
             if any(filename.startswith(p) for p in ("-", "_", ".", " ", "#")):
                 continue
-                seen_filenames.add(filename)
-                file_type = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ""
+            seen_filenames.add(filename)
+            file_type = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ""
 
-                context_start = max(0, match.start() - 50)
-                context_end = min(len(content), match.end() + 200)
-                context = content[context_start:context_end].strip()
+            context_start = max(0, match.start() - 50)
+            context_end = min(len(content), match.end() + 200)
+            context = content[context_start:context_end].strip()
 
-                sections = _parse_file_sections_from_context(content, match, filename)
+            sections = _parse_file_sections_from_context(content, match, filename)
 
-                files.append(FilePromise(
-                    filename=filename,
-                    file_type=file_type,
-                    sections=sections,
-                    required=True,
-                    context=context[:200],
-                ))
+            files.append(FilePromise(
+                filename=filename,
+                file_type=file_type,
+                sections=sections,
+                required=True,
+                context=context[:200],
+            ))
 
     for filename, sections in _extract_section_constraints(content).items():
         if not _RE_VALID_FILENAME.match(filename):
