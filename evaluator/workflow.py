@@ -187,8 +187,90 @@ class SkillEvaluationWorkflow:
 
     def _validate_resources(self, skill_analysis: dict, config: dict) -> None:
         """验证资源"""
-        # TODO: 实现资源验证
-        pass
+        from .cli import _build_plan_questions, _task_generation_allowed
+        from .skill_analyzer import SkillAnalysis, SkillCapability, SkillResource
+
+        resources_json = config.get("resources_json")
+        if resources_json:
+            try:
+                resource_data = json.loads(resources_json)
+                if not isinstance(resource_data, list):
+                    raise ValueError("resources JSON 必须是数组")
+            except json.JSONDecodeError:
+                raise ValueError("resources JSON 格式错误")
+        else:
+            resource_data = []
+
+        allow_generated_task = _task_generation_allowed(
+            resources_json,
+            config.get("allow_generated_task_prompt", False)
+        )
+
+        cwd = Path.cwd()
+        resolved_input_files = []
+        for raw_path in config.get("input_files", []):
+            candidate = Path(raw_path)
+            if not candidate.is_absolute():
+                candidate = cwd / candidate
+            if candidate.exists():
+                resolved_input_files.append(str(candidate.resolve()))
+
+        capability_dict = skill_analysis.get("capability", {})
+        capability = SkillCapability(
+            summary=capability_dict.get("summary", ""),
+            core_actions=capability_dict.get("core_actions", []),
+            output_type=capability_dict.get("output_type", ""),
+            output_formats=capability_dict.get("output_formats", []),
+            has_interactive_steps=capability_dict.get("has_interactive_steps", False)
+        )
+
+        resources = []
+        for r_dict in skill_analysis.get("required_resources", []):
+            resources.append(SkillResource(**r_dict))
+
+        analysis_obj = SkillAnalysis(
+            skill_name=skill_analysis.get("skill_name", ""),
+            skill_path=skill_analysis.get("skill_path", ""),
+            capability=capability,
+            required_resources=resources,
+            execution_mode=skill_analysis.get("execution_mode", "interactive"),
+            estimated_task_type=skill_analysis.get("estimated_task_type", ""),
+            tools_required=skill_analysis.get("tools_required", []),
+            triggers=skill_analysis.get("triggers", []),
+            evaluation_notes=skill_analysis.get("evaluation_notes", []),
+            evaluation_contract=skill_analysis.get("evaluation_contract", {})
+        )
+
+        task_prompt = config.get("task_prompt", "")
+
+        questions = _build_plan_questions(
+            analysis_obj,
+            resource_data,
+            cwd,
+            resolved_input_files,
+            task_prompt,
+            allow_generated_task
+        )
+
+        if questions:
+            error_data = {
+                "error": "needs_user_input",
+                "action": "ask_user",
+                "message": "生成评测计划前必须补充用户输入。请先向用户确认评测需求和所需资源，不要静默默认生成。",
+                "questions": questions,
+                "required_resources": skill_analysis.get("required_resources", []),
+                "task_prompt_policy": {
+                    "required": True,
+                    "ask_user_first": True,
+                    "can_auto_generate_if_user_allows": True,
+                    "allow_generated_task_prompt": allow_generated_task,
+                },
+                "resource_policy": {
+                    "file": "有真实文件就给路径；没有的话用户点头（allow_auto_generation=true）我就帮你造一份测试数据，报告里会标注是造的。",
+                    "credential_account_api": "账号、凭证、API key、数据库连接等不能由 AI 生成，只能使用用户提供的测试信息。",
+                }
+            }
+            raise ValueError(json.dumps(error_data, ensure_ascii=False))
 
     def _generate_plan(self, config: dict) -> Path:
         """生成评测计划"""
