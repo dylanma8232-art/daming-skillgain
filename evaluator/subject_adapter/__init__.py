@@ -42,6 +42,21 @@ def find_skill_root(skill_path: Path) -> Path:
     return skill_path
 
 
+import functools
+
+@functools.lru_cache(maxsize=32)
+def _read_file_content_cached(path_str: str, mtime: float, size: int) -> str:
+    return Path(path_str).read_text(encoding="utf-8", errors="replace")
+
+def _read_file_cached(path: Path) -> str:
+    """带基于 mtime 和 size 缓存的文件读取，防大文件重复 IO，支持并发并减少 stat 负担"""
+    try:
+        st = path.stat()
+    except FileNotFoundError:
+        return ""
+    return _read_file_content_cached(str(path), st.st_mtime, st.st_size)
+
+
 def skill_name_from_root(skill_root: Path) -> str:
     """从 SKILL.md frontmatter 提取 skill 名，缺省用目录名"""
     skill_md = skill_root / "SKILL.md"
@@ -257,7 +272,7 @@ class CodexSubjectAdapter(BaseSubjectAdapter):
             f"{self.AGENTS_END}\n"
         )
         agents_md = workspace_dir / "AGENTS.md"
-        existing = agents_md.read_text(encoding="utf-8") if agents_md.exists() else ""
+        existing = _read_file_cached(agents_md)
         # 幂等：先移除旧注入段
         if self.AGENTS_BEGIN in existing and self.AGENTS_END in existing:
             pre = existing.split(self.AGENTS_BEGIN)[0]
@@ -273,7 +288,7 @@ class CodexSubjectAdapter(BaseSubjectAdapter):
 
     def verify_skill_loaded(self, workspace_dir: Path, skill_name: str) -> dict[str, Any]:
         agents_md = Path(workspace_dir) / "AGENTS.md"
-        content = agents_md.read_text(encoding="utf-8", errors="replace") if agents_md.exists() else ""
+        content = _read_file_cached(agents_md)
         has_marker = self.AGENTS_BEGIN in content and self.AGENTS_END in content
         has_skill = f"# Injected Skill: {skill_name}" in content
         return {
@@ -291,7 +306,7 @@ class CodexSubjectAdapter(BaseSubjectAdapter):
         agents_md = Path(workspace_dir) / "AGENTS.md"
         removed = False
         if agents_md.exists():
-            content = agents_md.read_text(encoding="utf-8")
+            content = _read_file_cached(agents_md)
             if self.AGENTS_BEGIN in content and self.AGENTS_END in content:
                 pre = content.split(self.AGENTS_BEGIN)[0]
                 post = content.split(self.AGENTS_END)[-1]

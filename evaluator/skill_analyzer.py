@@ -541,17 +541,7 @@ def _default_assumptions_for_mode(execution_mode: str, resources: list[SkillReso
 
 # ========== 评测合同（不再依赖类别） ==========
 
-def build_evaluation_contract(
-    skill_name: str,
-    execution_mode: str,
-    capability: SkillCapability,
-    resources: list[SkillResource],
-) -> dict[str, Any]:
-    """从 skill 内容直接构建评测合同。
-
-    不再依赖关键词猜测类别，而是从 core_actions / output_type / resources 中提取。
-    """
-    # 1. task_outline：从 skill 描述和能力中提取
+def _build_task_outline(capability: SkillCapability) -> str:
     task_outline_parts = []
     if capability.summary:
         task_outline_parts.append(capability.summary[:200])
@@ -560,16 +550,17 @@ def build_evaluation_contract(
     if capability.output_type and capability.output_type != "unknown":
         task_outline_parts.append(f"输出形式：{capability.output_type}")
 
-    task_outline = "；".join(task_outline_parts) if task_outline_parts else (
+    return "；".join(task_outline_parts) if task_outline_parts else (
         "使用被测 skill 完成其设计目标，保留关键步骤和结果证据。"
     )
 
-    without_skill_task = (
+def _build_without_skill_task() -> str:
+    return (
         "不使用待评测 skill，直接完成同等用户目标。"
         "你不需要复刻被测 skill 的内部步骤，但必须交付与 with-skill 组可比较的最终结果。"
     )
 
-    # 2. success_criteria：从 skill 承诺出发
+def _build_success_criteria(capability: SkillCapability, resources: list[SkillResource]) -> list[str]:
     success_criteria = [
         "最终明确说明任务是否完成。",
         "关键产物已保存到 artifacts 目录。",
@@ -583,8 +574,9 @@ def build_evaluation_contract(
         success_criteria.append("如果存在用户确认步骤，必须记录真实回复或默认假设。")
     if any(resource.type == "business_context" for resource in resources):
         success_criteria.append("最终产物必须回应本次任务的主问题，而不是泛泛输出。")
+    return success_criteria[:5]
 
-    # 3. expected_artifacts：从输出格式 + 核心能力推导
+def _build_expected_artifacts(capability: SkillCapability) -> list[dict[str, Any]]:
     expected_artifacts = []
     output_formats = capability.output_formats
     if output_formats:
@@ -610,8 +602,9 @@ def build_evaluation_contract(
             "extensions": [".md", ".json", ".txt"],
             "keywords": ["trace", "checkpoint", "步骤", "假设", "assumption"],
         })
+    return expected_artifacts
 
-    # 4. verification_checks
+def _build_verification_checks(execution_mode: str) -> list[str]:
     verification_checks = [
         "检查 artifacts 中是否存在合同要求的关键产物。",
         "检查 transcript/stdout 中是否有任务完成证据。",
@@ -620,13 +613,9 @@ def build_evaluation_contract(
     ]
     if execution_mode in {"interactive", "hybrid"}:
         verification_checks.append("检查是否把用户确认步骤记录为真实输入或默认假设。")
+    return verification_checks
 
-    # 5. evaluation_focus：从核心能力中提取
-    evaluation_focus = []
-    if capability.core_actions:
-        evaluation_focus.extend(capability.core_actions[:4])
-
-    # 6. validation_assertions (升级为四类确定性断言体系: exact_match / contains_facts / recomputable / script_eval)
+def _build_validation_assertions(capability: SkillCapability, resources: list[SkillResource]) -> list[dict[str, Any]]:
     assertions: list[dict[str, Any]] = [
         {
             "name": "completion_signal",
@@ -651,7 +640,6 @@ def build_evaluation_contract(
         },
     ]
 
-    # 如果 skill 有核心动作，检查它们是否被执行 (contains_facts)
     if capability.core_actions:
         assertions.append({
             "name": "core_actions_executed",
@@ -668,7 +656,7 @@ def build_evaluation_contract(
             "description": f"应体现 skill 核心动作的执行痕迹。",
         })
 
-    # 如果 skill 有特定输出格式，检查产物是否存在 (script_eval)
+    output_formats = capability.output_formats
     if output_formats:
         assertions.append({
             "name": "expected_output_formats",
@@ -685,7 +673,6 @@ def build_evaluation_contract(
             "description": f"应产出 skill 设计要求的文件类型。",
         })
 
-    # 通用：执行留痕 (contains_facts)
     assertions.append({
         "name": "execution_trace",
         "type": "contains_facts",
@@ -701,7 +688,6 @@ def build_evaluation_contract(
         "description": "至少保留一部分执行留痕或假设说明。",
     })
 
-    # 业务回应与关键事实 (contains_facts)
     if any(resource.type == "business_context" for resource in resources):
         assertions.append({
             "name": "business_question_response",
@@ -718,7 +704,6 @@ def build_evaluation_contract(
             "description": "最终产物应回应主问题或业务目标。",
         })
 
-    # 可重算与精确匹配通用规则槽位
     if any(ext in [".csv", ".xlsx", ".json"] for ext in output_formats):
         assertions.append({
             "name": "structured_data_integrity",
@@ -731,18 +716,31 @@ def build_evaluation_contract(
             "description": "数据文件需结构完整且行列对齐。",
         })
 
+    return assertions[:8]
+
+
+def build_evaluation_contract(
+    skill_name: str,
+    execution_mode: str,
+    capability: SkillCapability,
+    resources: list[SkillResource],
+) -> dict[str, Any]:
+    """从 skill 内容直接构建评测合同。
+
+    不再依赖关键词猜测类别，而是从 core_actions / output_type / resources 中提取。
+    """
     return {
         "version": "dynamic-contract-v4",
         "skill_name": skill_name,
         "primary_goal": capability.summary or f"使用 {skill_name} 完成其设计目标",
-        "task_outline": task_outline,
-        "without_skill_task": without_skill_task,
-        "success_criteria": success_criteria[:5],
-        "expected_artifacts": expected_artifacts,
-        "verification_checks": verification_checks,
+        "task_outline": _build_task_outline(capability),
+        "without_skill_task": _build_without_skill_task(),
+        "success_criteria": _build_success_criteria(capability, resources),
+        "expected_artifacts": _build_expected_artifacts(capability),
+        "verification_checks": _build_verification_checks(execution_mode),
         "allowed_assumptions": _default_assumptions_for_mode(execution_mode, resources),
-        "evaluation_focus": evaluation_focus,
-        "validation_assertions": assertions[:8],
+        "evaluation_focus": capability.core_actions[:4] if capability.core_actions else [],
+        "validation_assertions": _build_validation_assertions(capability, resources),
     }
 
 
