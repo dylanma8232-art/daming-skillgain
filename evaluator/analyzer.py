@@ -20,6 +20,8 @@ STUCK_PATTERNS = [
     r"您希望",
 ]
 
+COMPILED_STUCK_PATTERNS = [re.compile(p, re.IGNORECASE) for p in STUCK_PATTERNS]
+
 COMPLETION_PATTERNS = [
     r"任务完成",
     r"任务已完成",
@@ -127,13 +129,15 @@ def detect_stuck_state(stdout_text: str, transcript_text: str = "") -> dict[str,
     combined_lower = combined.lower()
 
     user_prompts_found = []
-    for pattern in STUCK_PATTERNS:
-        matches = list(re.finditer(pattern, combined, re.IGNORECASE))
+    last_prompt_pos = 0
+    for pattern, compiled_pattern in zip(STUCK_PATTERNS, COMPILED_STUCK_PATTERNS):
+        matches = list(compiled_pattern.finditer(combined))
         if matches:
             user_prompts_found.append(pattern)
             for match in matches:
                 stuck_info["waiting_for_user"] = True
                 stuck_info["stuck_type"] = "waiting_for_user_input"
+                last_prompt_pos = max(last_prompt_pos, match.end())
 
     if user_prompts_found:
         self_response_indicators = [
@@ -159,11 +163,6 @@ def detect_stuck_state(stdout_text: str, transcript_text: str = "") -> dict[str,
             re.search(indicator, combined_lower)
             for indicator in self_response_indicators
         )
-
-        last_prompt_pos = 0
-        for pattern in user_prompts_found:
-            for match in re.finditer(pattern, combined, re.IGNORECASE):
-                last_prompt_pos = max(last_prompt_pos, match.end())
 
         remaining_text = combined[last_prompt_pos:] if last_prompt_pos > 0 else ""
         has_subsequent_execution = bool(
