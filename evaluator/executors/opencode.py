@@ -492,11 +492,11 @@ def get_opencode_models() -> list[str]:
                 continue
 
     tried = []
-    for cmd in [f"'{cli}' models"]:
-        tried.append(cmd)
+    for cmd in [[cli, "models"]]:
+        tried.append(" ".join(cmd))
         try:
             result = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, timeout=15
+                cmd, capture_output=True, text=True, timeout=15
             )
             if result.returncode == 0:
                 models = []
