@@ -4,7 +4,6 @@ from __future__ import annotations
 import ast
 import csv
 import io
-import math
 import operator as op
 import re
 from typing import Any
