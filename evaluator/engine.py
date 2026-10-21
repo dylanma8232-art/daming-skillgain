@@ -20,7 +20,7 @@ from hashlib import sha256
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 
 from .analyzer import write_run_summary
 from .models import ExecutionMetrics
@@ -51,6 +51,7 @@ _ENTRY_PATTERNS = [
 _PHASE_PATTERN = re.compile(r"(?:Phase|阶段|步骤|Step)\s*(\d+)[：:\-\s]+([^\n]{5,80})")
 
 _CONSTRAINT_KEYWORDS = ["必须", "禁止", "不得", "不能", "确保", "限制", "强制", "一定"]
+
 _CONSTRAINT_PATTERN = re.compile(rf"({'|'.join(_CONSTRAINT_KEYWORDS)})[^\n]{{2,100}}")
 
 
@@ -287,7 +288,6 @@ from .host_session import (
     run_host_session,
     run_host_text,
 )
-from .executors import UnsupportedCapabilityError
 from .subject_adapter import get_subject_adapter
 
 # get_opencode_models: opencode 宿主域内模型发现，CLI 交互选型仍在使用（P3 保留项，
@@ -3219,39 +3219,45 @@ def _build_evidence_bundle(
 
 
 def _extract_json_object_from_text(text: str) -> dict[str, Any] | None:
-    fenced = re.search(
-        r"```(?:json)?\s*(\{.*?\})\s*```", text, re.IGNORECASE | re.DOTALL
-    )
-    candidates = [fenced.group(1)] if fenced else []
+    def _generate_candidates() -> Generator[str, None, None]:
+        fenced = re.search(
+            r"```(?:json)?\s*(\{.*?\})\s*```", text, re.IGNORECASE | re.DOTALL
+        )
+        if fenced:
+            yield fenced.group(1)
 
-    start = text.find("{")
-    while start != -1:
-        depth = 0
-        in_string = False
-        escape = False
-        for idx in range(start, len(text)):
-            char = text[idx]
-            if escape:
-                escape = False
-                continue
-            if char == "\\":
-                escape = True
-                continue
-            if char == '"':
-                in_string = not in_string
-                continue
-            if in_string:
-                continue
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    candidates.append(text[start : idx + 1])
-                    break
-        start = text.find("{", start + 1)
+        start = text.find("{")
+        while start != -1:
+            depth = 0
+            in_string = False
+            escape = False
+            for idx in range(start, len(text)):
+                char = text[idx]
+                if escape:
+                    escape = False
+                    continue
+                if char == "\\":
+                    escape = True
+                    continue
+                if char == '"':
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        yield text[start : idx + 1]
+                        break
+            start = text.find("{", start + 1)
 
-    for candidate in candidates:
+    seen = set()
+    for candidate in _generate_candidates():
+        if candidate in seen:
+            continue
+        seen.add(candidate)
         try:
             parsed = json.loads(candidate)
             if isinstance(parsed, dict):
