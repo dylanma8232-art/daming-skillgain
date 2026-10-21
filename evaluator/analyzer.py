@@ -316,6 +316,10 @@ def check_phase_completion(artifacts_dir: Path, phases: list[dict[str, str]], tr
     if not phases:
         return {"phase_count": 0, "completed_phases": [], "missing_phases": [], "coverage": 0.0}
 
+    existing_files_lower = []
+    if artifacts_dir.exists():
+        existing_files_lower = [f.name.lower() for f in artifacts_dir.rglob("*") if f.is_file()]
+
     completed = []
     missing = []
     for phase in phases:
@@ -324,21 +328,18 @@ def check_phase_completion(artifacts_dir: Path, phases: list[dict[str, str]], tr
         # 检查 artifacts 中是否有对应文件
         found = False
         search_names = [
-            f"phase{num}-checkpoint",
-            f"phase{num}_checkpoint",
-            f"phase_{num}_checkpoint",
-            f"phase{num}",
-            f"step{num}",
-            f"step_{num}",
-            num,
+            f"phase{num}-checkpoint".lower(),
+            f"phase{num}_checkpoint".lower(),
+            f"phase_{num}_checkpoint".lower(),
+            f"phase{num}".lower(),
+            f"step{num}".lower(),
+            f"step_{num}".lower(),
+            str(num).lower(),
         ]
         if artifacts_dir.exists():
-            for f in artifacts_dir.rglob("*"):
-                if not f.is_file():
-                    continue
-                fname_lower = f.name.lower()
+            for fname_lower in existing_files_lower:
                 for sn in search_names:
-                    if sn.lower() in fname_lower:
+                    if sn in fname_lower:
                         found = True
                         break
                 if found:
