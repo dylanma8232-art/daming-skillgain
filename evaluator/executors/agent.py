@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -298,9 +299,10 @@ class AgentExecutor(BaseExecutor):
     def _execute_command(self, command: str) -> dict:
         """执行命令"""
         try:
+            parsed_command = shlex.split(command)
             result = subprocess.run(
-                command,
-                shell=True,
+                parsed_command,
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=30,
