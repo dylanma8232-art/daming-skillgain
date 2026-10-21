@@ -31,6 +31,29 @@ from .result_files import select_result_files, write_result_selection
 
 LOGGER = logging.getLogger("skill_evaluator.engine")
 
+_OUTPUT_PATTERNS = [
+    re.compile(r"输出[：:\s]+([^\n]+)"),
+    re.compile(r"生成[：:\s]+([^\n]+)"),
+    re.compile(r"产出[：:\s]+([^\n]+)"),
+    re.compile(r"报告[：:\s]+([^\n]+)"),
+    re.compile(r"文件[：:\s]+([^\n]+)"),
+]
+
+_FILE_PATTERNS = [
+    re.compile(r"(\.(?:md|xlsx|xls|csv|json|html|txt|sql|py|js|ts))", re.IGNORECASE),
+]
+
+_ENTRY_PATTERNS = [
+    re.compile(r"(?:入口|执行方式)[：:\-]*\s*```[^\n]*\n([^\n]+)"),
+    re.compile(r"(?:命令|运行)[：:\-]*\s*(python[^\n]+)"),
+]
+
+_PHASE_PATTERN = re.compile(r"(?:Phase|阶段|步骤|Step)\s*(\d+)[：:\-\s]+([^\n]{5,80})")
+
+_CONSTRAINT_KEYWORDS = ["必须", "禁止", "不得", "不能", "确保", "限制", "强制", "一定"]
+
+_CONSTRAINT_PATTERN = re.compile(rf"({'|'.join(_CONSTRAINT_KEYWORDS)})[^\n]{{2,100}}")
+
 
 def resolve_config_host(config: EvaluationConfig) -> str | None:
     """解析配置中的宿主：显式 host 优先，否则按 execution_mode 默认映射（P2 解耦）。"""
@@ -2310,59 +2333,33 @@ def _extract_skill_promises(skill_path: str) -> dict[str, Any]:
 
     eval_dims = _extract_evaluation_dimensions(content)
 
-    phase_pattern = r"(?:Phase|阶段|步骤|Step)\s*(\d+)[：:\-\s]+([^\n]{5,80})"
     phases = []
-    for match in re.finditer(phase_pattern, content):
+    for match in _PHASE_PATTERN.finditer(content):
         phase_num = match.group(1)
         phase_name = match.group(2).strip()
         phases.append(f"Phase {phase_num}: {phase_name}")
 
-    constraint_keywords = [
-        "必须",
-        "禁止",
-        "不得",
-        "不能",
-        "确保",
-        "限制",
-        "强制",
-        "一定",
-    ]
-    constraint_pattern = rf"({'|'.join(constraint_keywords)})[^\n]{{2,100}}"
     constraints = []
-    for match in re.finditer(constraint_pattern, content):
+    for match in _CONSTRAINT_PATTERN.finditer(content):
         text = match.group(0).strip()
         if len(text) > 5:
             constraints.append(text)
 
-    output_patterns = [
-        r"输出[：:\s]+([^\n]+)",
-        r"生成[：:\s]+([^\n]+)",
-        r"产出[：:\s]+([^\n]+)",
-        r"报告[：:\s]+([^\n]+)",
-        r"文件[：:\s]+([^\n]+)",
-    ]
     outputs = []
-    for pattern in output_patterns:
-        for match in re.finditer(pattern, content):
+    for pattern in _OUTPUT_PATTERNS:
+        for match in pattern.finditer(content):
             text = match.group(0).strip()
             if len(text) > 3:
                 outputs.append(text)
 
-    file_patterns = [
-        r"(\.(?:md|xlsx|xls|csv|json|html|txt|sql|py|js|ts))",
-    ]
     output_files = []
-    for pattern in file_patterns:
-        for match in re.finditer(pattern, content, re.IGNORECASE):
+    for pattern in _FILE_PATTERNS:
+        for match in pattern.finditer(content):
             output_files.append(match.group(1).lower())
 
-    entry_patterns = [
-        r"(?:入口|执行方式)[：:\-]*\s*```[^\n]*\n([^\n]+)",
-        r"(?:命令|运行)[：:\-]*\s*(python[^\n]+)",
-    ]
     entry_points = []
-    for pattern in entry_patterns:
-        for match in re.finditer(pattern, content):
+    for pattern in _ENTRY_PATTERNS:
+        for match in pattern.finditer(content):
             entry_points.append(match.group(1).strip()[:80])
 
     promises = {
