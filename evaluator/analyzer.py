@@ -8,7 +8,6 @@ from typing import Any
 from .io_utils import read_json, write_json, write_text
 from .models import AnalysisConfig, ExperimentResult
 
-
 STUCK_PATTERNS = [
     r"请确认",
     r"请回复",
@@ -88,7 +87,20 @@ CATEGORY_EXPECTATIONS = {
 }
 
 TEXT_PREVIEW_EXTENSIONS = {
-    ".md", ".txt", ".json", ".csv", ".html", ".htm", ".py", ".js", ".ts", ".tsx", ".jsx", ".sql", ".yaml", ".yml"
+    ".md",
+    ".txt",
+    ".json",
+    ".csv",
+    ".html",
+    ".htm",
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".sql",
+    ".yaml",
+    ".yml",
 }
 
 SKILL_USAGE_PATTERNS = [
@@ -125,10 +137,23 @@ def detect_stuck_state(stdout_text: str, transcript_text: str = "") -> dict[str,
 
     if user_prompts_found:
         self_response_indicators = [
-            r"确认", r"选择", r"继续", r"是", r"否", r"默认",
-            r"assume", r"assume", r"decision", r"自主", r"自动",
-            r"我选择", r"我将", r"我们继续", r" proceed",
-            r"假设", r"保守默认",
+            r"确认",
+            r"选择",
+            r"继续",
+            r"是",
+            r"否",
+            r"默认",
+            r"assume",
+            r"assume",
+            r"decision",
+            r"自主",
+            r"自动",
+            r"我选择",
+            r"我将",
+            r"我们继续",
+            r" proceed",
+            r"假设",
+            r"保守默认",
         ]
         has_self_response = any(
             re.search(indicator, combined_lower)
@@ -141,10 +166,13 @@ def detect_stuck_state(stdout_text: str, transcript_text: str = "") -> dict[str,
                 last_prompt_pos = max(last_prompt_pos, match.end())
 
         remaining_text = combined[last_prompt_pos:] if last_prompt_pos > 0 else ""
-        has_subsequent_execution = bool(re.search(
-            r"(phase\s*\d+|执行|完成|分析|生成|创建|提交|下载|导出|运行|调用)",
-            remaining_text, re.IGNORECASE
-        ))
+        has_subsequent_execution = bool(
+            re.search(
+                r"(phase\s*\d+|执行|完成|分析|生成|创建|提交|下载|导出|运行|调用)",
+                remaining_text,
+                re.IGNORECASE,
+            )
+        )
 
         if has_self_response or has_subsequent_execution:
             stuck_info["self_resolved"] = True
@@ -161,8 +189,12 @@ def detect_stuck_state(stdout_text: str, transcript_text: str = "") -> dict[str,
     phase_matches = list(re.finditer(r"Phase\s*(\d+)\s*完成", combined))
     if phase_matches and not stuck_info.get("self_resolved"):
         last_phase = int(phase_matches[-1].group(1))
-        after_phase = combined[phase_matches[-1].end():]
-        has_task_completion = bool(re.search(r"(任务完成|完成|done|completed|finished)", after_phase, re.IGNORECASE))
+        after_phase = combined[phase_matches[-1].end() :]
+        has_task_completion = bool(
+            re.search(
+                r"(任务完成|完成|done|completed|finished)", after_phase, re.IGNORECASE
+            )
+        )
         has_next_phase = bool(re.search(f"Phase\\s*{last_phase + 1}", combined))
         if not has_next_phase and not has_task_completion and last_phase < 8:
             stuck_info["is_stuck"] = True
@@ -193,12 +225,21 @@ def validate_artifact_content(artifacts_dir: Path) -> dict[str, Any]:
         try:
             content = f.read_text(encoding="utf-8", errors="replace")
         except Exception:
-            validation["details"][rel] = {"exists": True, "valid": False, "reason": "无法读取"}
+            validation["details"][rel] = {
+                "exists": True,
+                "valid": False,
+                "reason": "无法读取",
+            }
             validation["artifacts_invalid"] += 1
             continue
 
         if len(content.strip()) < 10:
-            validation["details"][rel] = {"exists": True, "valid": False, "reason": "文件内容过少", "size": len(content)}
+            validation["details"][rel] = {
+                "exists": True,
+                "valid": False,
+                "reason": "文件内容过少",
+                "size": len(content),
+            }
             validation["artifacts_invalid"] += 1
             continue
 
@@ -206,16 +247,34 @@ def validate_artifact_content(artifacts_dir: Path) -> dict[str, Any]:
             try:
                 data = json.loads(content)
                 if isinstance(data, (dict, list)) and len(data) > 0:
-                    validation["details"][rel] = {"exists": True, "valid": True, "reason": "有效JSON", "size": len(content)}
+                    validation["details"][rel] = {
+                        "exists": True,
+                        "valid": True,
+                        "reason": "有效JSON",
+                        "size": len(content),
+                    }
                     validation["artifacts_valid"] += 1
                 else:
-                    validation["details"][rel] = {"exists": True, "valid": False, "reason": "JSON为空"}
+                    validation["details"][rel] = {
+                        "exists": True,
+                        "valid": False,
+                        "reason": "JSON为空",
+                    }
                     validation["artifacts_invalid"] += 1
             except json.JSONDecodeError as e:
-                validation["details"][rel] = {"exists": True, "valid": False, "reason": f"JSON解析失败: {str(e)[:50]}"}
+                validation["details"][rel] = {
+                    "exists": True,
+                    "valid": False,
+                    "reason": f"JSON解析失败: {str(e)[:50]}",
+                }
                 validation["artifacts_invalid"] += 1
         else:
-            validation["details"][rel] = {"exists": True, "valid": True, "reason": "文件非空", "size": len(content)}
+            validation["details"][rel] = {
+                "exists": True,
+                "valid": True,
+                "reason": "文件非空",
+                "size": len(content),
+            }
             validation["artifacts_valid"] += 1
 
     return validation
@@ -234,8 +293,12 @@ def check_task_completion(stdout_text: str, transcript_text: str) -> dict[str, A
 
 def extract_skill_usage(transcript_text: str, skill_name: str = "") -> dict[str, Any]:
     usage = {
-        "skill_name": skill_name, "mentioned": False, "mentioned_count": 0,
-        "likely_used": False, "usage_evidence": [], "behavior_matches": [],
+        "skill_name": skill_name,
+        "mentioned": False,
+        "mentioned_count": 0,
+        "likely_used": False,
+        "usage_evidence": [],
+        "behavior_matches": [],
     }
     if not transcript_text:
         return usage
@@ -262,13 +325,24 @@ def extract_skill_usage(transcript_text: str, skill_name: str = "") -> dict[str,
 
 def extract_execution_metrics(stdout_text: str, stderr_text: str) -> dict[str, Any]:
     metrics = {
-        "has_errors": False, "error_count": 0, "has_timeout": False,
-        "has_memory_issue": False, "has_network_issue": False,
-        "stdout_length": len(stdout_text), "stderr_length": len(stderr_text),
+        "has_errors": False,
+        "error_count": 0,
+        "has_timeout": False,
+        "has_memory_issue": False,
+        "has_network_issue": False,
+        "stdout_length": len(stdout_text),
+        "stderr_length": len(stderr_text),
         "execution_time_seconds": None,
     }
     combined = f"{stdout_text}\n{stderr_text}"
-    error_patterns = [r"error", r"exception", r"traceback", r"failed", r"failure", r"fatal"]
+    error_patterns = [
+        r"error",
+        r"exception",
+        r"traceback",
+        r"failed",
+        r"failure",
+        r"fatal",
+    ]
     for pattern in error_patterns:
         count = len(re.findall(pattern, combined, re.IGNORECASE))
         if count > 0:
@@ -276,7 +350,11 @@ def extract_execution_metrics(stdout_text: str, stderr_text: str) -> dict[str, A
             metrics["error_count"] += count
     if "timeout" in combined.lower():
         metrics["has_timeout"] = True
-    if "memory" in combined.lower() or "out of memory" in combined.lower() or "oom" in combined.lower():
+    if (
+        "memory" in combined.lower()
+        or "out of memory" in combined.lower()
+        or "oom" in combined.lower()
+    ):
         metrics["has_memory_issue"] = True
     if "connection refused" in combined.lower() or "network" in combined.lower():
         metrics["has_network_issue"] = True
@@ -286,17 +364,18 @@ def extract_execution_metrics(stdout_text: str, stderr_text: str) -> dict[str, A
     return metrics
 
 
+PHASE_PATTERNS = [
+    re.compile(r"(?:Phase|阶段)\s*(\d+)[\s:：\-—]+([^\n#]+)", re.IGNORECASE),
+    re.compile(r"第([一二三四五六七八九十\d]+)步[\s:：\-—]+([^\n#]+)", re.IGNORECASE),
+    re.compile(r"(?:Step)\s*(\d+)[\s:：\-—]+([^\n#]+)", re.IGNORECASE),
+]
+
+
 def extract_phase_structure(skill_md_content: str) -> list[dict[str, str]]:
     """从 SKILL.md 内容中提取 Phase/Step 结构。"""
     phases = []
-    # 匹配 "Phase 1: xxx" / "第1步 xxx" / "Step 1: xxx"
-    patterns = [
-        r"(?:Phase|阶段)\s*(\d+)[\s:：\-—]+([^\n#]+)",
-        r"第([一二三四五六七八九十\d]+)步[\s:：\-—]+([^\n#]+)",
-        r"(?:Step)\s*(\d+)[\s:：\-—]+([^\n#]+)",
-    ]
-    for pattern in patterns:
-        for match in re.finditer(pattern, skill_md_content, re.IGNORECASE):
+    for pattern in PHASE_PATTERNS:
+        for match in pattern.finditer(skill_md_content):
             num = match.group(1)
             name = match.group(2).strip()[:50]
             if name and len(name) > 2:
@@ -312,10 +391,17 @@ def extract_phase_structure(skill_md_content: str) -> list[dict[str, str]]:
     return sorted(unique, key=lambda x: x["number"])
 
 
-def check_phase_completion(artifacts_dir: Path, phases: list[dict[str, str]], transcript_text: str = "") -> dict[str, Any]:
+def check_phase_completion(
+    artifacts_dir: Path, phases: list[dict[str, str]], transcript_text: str = ""
+) -> dict[str, Any]:
     """基于 skill 实际 Phase 结构检查完成情况。"""
     if not phases:
-        return {"phase_count": 0, "completed_phases": [], "missing_phases": [], "coverage": 0.0}
+        return {
+            "phase_count": 0,
+            "completed_phases": [],
+            "missing_phases": [],
+            "coverage": 0.0,
+        }
 
     completed = []
     missing = []
@@ -346,7 +432,12 @@ def check_phase_completion(artifacts_dir: Path, phases: list[dict[str, str]], tr
                     break
             # 也检查内容中是否提到该 Phase
             if not found and transcript_text:
-                for keyword in [f"Phase {num}", f"phase {num}", f"第{num}步", f"Step {num}"]:
+                for keyword in [
+                    f"Phase {num}",
+                    f"phase {num}",
+                    f"第{num}步",
+                    f"Step {num}",
+                ]:
                     if keyword.lower() in transcript_text.lower():
                         found = True
                         break
@@ -365,7 +456,9 @@ def check_phase_completion(artifacts_dir: Path, phases: list[dict[str, str]], tr
     }
 
 
-def extract_evidence_chain(stdout_text: str, transcript_text: str, skill_phases: list[dict[str, str]] = None) -> dict[str, Any]:
+def extract_evidence_chain(
+    stdout_text: str, transcript_text: str, skill_phases: list[dict[str, str]] = None
+) -> dict[str, Any]:
     combined = f"{stdout_text}\n{transcript_text}"
 
     # 基于 skill 实际 Phase 结构检查（优先级最高）
@@ -378,8 +471,10 @@ def extract_evidence_chain(stdout_text: str, transcript_text: str, skill_phases:
         # 用 skill 实际 Phase 名称做精确匹配
         for phase in skill_phases:
             patterns = [
-                f"Phase {phase['number']}", f"phase {phase['number']}",
-                f"第{phase['number']}步", f"Step {phase['number']}",
+                f"Phase {phase['number']}",
+                f"phase {phase['number']}",
+                f"第{phase['number']}步",
+                f"Step {phase['number']}",
                 phase["name"][:10],
             ]
             for pat in patterns:
@@ -388,7 +483,9 @@ def extract_evidence_chain(stdout_text: str, transcript_text: str, skill_phases:
                     start = max(0, idx - 10)
                     end = min(len(combined), idx + len(pat) + 50)
                     ctx = combined[start:end].replace("\n", " ").strip()[:100]
-                    checkpoints.append(f"Phase {phase['number']}: {phase['name']} — {ctx}")
+                    checkpoints.append(
+                        f"Phase {phase['number']}: {phase['name']} — {ctx}"
+                    )
                     break
     else:
         # 回退到通用关键词
@@ -455,7 +552,11 @@ def extract_evidence_chain(stdout_text: str, transcript_text: str, skill_phases:
         "error_recoveries": error_recoveries[:5],
         "error_recovery_count": len(error_recoveries),
         "evidence_score": min(100, evidence_score),
-        "evidence_completeness": "high" if evidence_score >= 70 else "medium" if evidence_score >= 40 else "low",
+        "evidence_completeness": (
+            "high"
+            if evidence_score >= 70
+            else "medium" if evidence_score >= 40 else "low"
+        ),
     }
     if phase_check:
         result["phase_coverage"] = phase_check
@@ -463,7 +564,12 @@ def extract_evidence_chain(stdout_text: str, transcript_text: str, skill_phases:
 
 
 def extract_artifact_quality(artifacts_dir: Path) -> dict[str, Any]:
-    quality = {"total_files": 0, "total_size_bytes": 0, "max_single_file_bytes": 0, "extension_counts": {}}
+    quality = {
+        "total_files": 0,
+        "total_size_bytes": 0,
+        "max_single_file_bytes": 0,
+        "extension_counts": {},
+    }
     if not artifacts_dir.exists():
         return quality
     for f in sorted(artifacts_dir.rglob("*")):
@@ -473,7 +579,9 @@ def extract_artifact_quality(artifacts_dir: Path) -> dict[str, Any]:
         try:
             size = f.stat().st_size
             quality["total_size_bytes"] += size
-            quality["max_single_file_bytes"] = max(quality["max_single_file_bytes"], size)
+            quality["max_single_file_bytes"] = max(
+                quality["max_single_file_bytes"], size
+            )
         except Exception:
             pass
         ext = f.suffix.lower()
@@ -526,9 +634,17 @@ def aggregate_run(run_dir: Path) -> dict[str, Any]:
         model_stats = stats.values() if isinstance(stats, dict) else []
         blind_review["completed"] = True
         blind_review["paired_model_count"] = len(list(model_stats))
-        blind_review["skill_helped_count"] = sum(1 for item in stats.values() if item.get("skill_helped")) if isinstance(stats, dict) else 0
+        blind_review["skill_helped_count"] = (
+            sum(1 for item in stats.values() if item.get("skill_helped"))
+            if isinstance(stats, dict)
+            else 0
+        )
 
-    return {"comparison": comparison, "result_count": len(results), "blind_review": blind_review}
+    return {
+        "comparison": comparison,
+        "result_count": len(results),
+        "blind_review": blind_review,
+    }
 
 
 def write_run_summary(run_dir: Path) -> dict[str, Any]:
@@ -575,9 +691,17 @@ def write_run_summary(run_dir: Path) -> dict[str, Any]:
             for mode, info in data.items():
                 label = "With Skill" if mode == "with_skill" else "Without Skill"
                 status_icon = "✅" if info.get("success") else "❌"
-                time_str = f"{info['wall_clock_seconds']:.1f}s" if info.get("wall_clock_seconds") else "N/A"
-                token_str = f"{info['total_tokens']:,}" if info.get("total_tokens") else "N/A"
-                lines.append(f"- {label}: {status_icon} {info['status']} | 耗时: {time_str} | Token: {token_str}")
+                time_str = (
+                    f"{info['wall_clock_seconds']:.1f}s"
+                    if info.get("wall_clock_seconds")
+                    else "N/A"
+                )
+                token_str = (
+                    f"{info['total_tokens']:,}" if info.get("total_tokens") else "N/A"
+                )
+                lines.append(
+                    f"- {label}: {status_icon} {info['status']} | 耗时: {time_str} | Token: {token_str}"
+                )
             lines.append("")
 
     write_text(run_dir / "summary.md", "\n".join(lines))
