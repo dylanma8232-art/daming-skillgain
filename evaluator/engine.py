@@ -14,7 +14,6 @@ import zipfile
 from threading import Lock
 import urllib.error
 import urllib.request
-import yaml
 from dataclasses import dataclass
 from hashlib import sha256
 from dataclasses import asdict
