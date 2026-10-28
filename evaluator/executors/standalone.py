@@ -1,6 +1,5 @@
 """独立执行器 - 内置 HTTP 客户端，不依赖任何 CLI 工具"""
 from __future__ import annotations
-import json
 import os
 from typing import Any
 

@@ -4,7 +4,7 @@ from typing import Any
 
 from .workflow import SkillEvaluationWorkflow
 from .executors import create_executor
-from .model_discovery import ModelDiscovery, interactive_setup
+from .model_discovery import ModelDiscovery
 
 
 class SkillEvaluator:

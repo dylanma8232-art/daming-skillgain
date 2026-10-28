@@ -10,13 +10,14 @@ import logging
 import math
 import re
 import hashlib
-import shutil
 import zipfile
 import xml.etree.ElementTree as ET
 import base64
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
+
+_RE_SCHEME_LABEL = re.compile(r'方案[A-Z]')
 
 from .analyzer import (
     check_task_completion,
@@ -32,7 +33,6 @@ from .io_utils import read_json, write_text
 from .plain_language import (
     JARGON_TERMS,
     build_plain_summary,
-    contains_untranslated_jargon,
     verdict_to_plain_language,
     votes_to_plain_language,
 )
@@ -132,8 +132,7 @@ def load_blind_vote_data(run_dir: Path) -> tuple[list[dict[str, Any]], list[dict
                                     scheme_critiques[label] = {}
                                 scheme_critiques[label][voting_model] = reason
                         if overall:
-                            import re
-                            all_labels_in_overall = re.findall(r'方案[A-Z]', overall)
+                            all_labels_in_overall = _RE_SCHEME_LABEL.findall(overall)
                             for label in all_labels_in_overall:
                                 if label not in scheme_critiques:
                                     scheme_critiques[label] = {}

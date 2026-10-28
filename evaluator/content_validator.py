@@ -10,6 +10,10 @@ from typing import Any
 
 from .promise_parser import FilePromise, SectionConstraint
 
+_RE_MD_LIST_ITEMS = re.compile(r'^\s*[-*+]\s+', re.MULTILINE)
+_RE_MD_NUMBERED_ITEMS = re.compile(r'^\s*\d+[\.、)\s]', re.MULTILINE)
+_RE_MD_HEADERS = re.compile(r'^(#{1,6})\s+(.+)$', re.MULTILINE)
+
 
 @dataclass
 class FileValidationResult:
@@ -109,8 +113,8 @@ class ContentValidator:
                 section_result["detail"] = f"找到章节: {section.name}"
 
                 if section.min_items is not None:
-                    items = re.findall(r'^\s*[-*+]\s+', section_text, re.MULTILINE)
-                    numbered_items = re.findall(r'^\s*\d+[\.、)\s]', section_text, re.MULTILINE)
+                    items = _RE_MD_LIST_ITEMS.findall(section_text)
+                    numbered_items = _RE_MD_NUMBERED_ITEMS.findall(section_text)
                     count = len(items) + len(numbered_items)
                     if count < section.min_items:
                         section_result["detail"] += f", {section.name}仅{count}条(要求≥{section.min_items})"
@@ -370,7 +374,7 @@ class ContentValidator:
 
     def _parse_md_headers(self, content: str) -> list[dict[str, Any]]:
         headers = []
-        for match in re.finditer(r'^(#{1,6})\s+(.+)$', content, re.MULTILINE):
+        for match in _RE_MD_HEADERS.finditer(content):
             headers.append({
                 "level": len(match.group(1)),
                 "text": match.group(2).strip(),

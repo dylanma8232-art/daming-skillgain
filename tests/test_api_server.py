@@ -1,6 +1,14 @@
 import pytest
-from fastapi.testclient import TestClient
-from evaluator.api_server import app
+
+try:
+    from fastapi.testclient import TestClient
+    from evaluator.api_server import app
+    HAS_FASTAPI = app is not None
+except ImportError:
+    HAS_FASTAPI = False
+
+if not HAS_FASTAPI:
+    pytest.skip("fastapi not installed", allow_module_level=True)
 
 client = TestClient(app)
 

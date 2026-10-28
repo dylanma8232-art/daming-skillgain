@@ -1,5 +1,6 @@
 """MCP Server - 让任何支持 MCP 的 agent 都能调用"""
 from __future__ import annotations
+import asyncio
 import json
 from typing import Any
 
@@ -40,7 +41,8 @@ if HAS_MCP:
                 executor_type=executor_type
             )
             
-            result = evaluator.run(
+            result = await asyncio.to_thread(
+                evaluator.run,
                 task_prompt=task_prompt,
                 models=models,
                 voting_models=voting_models,
@@ -70,7 +72,7 @@ if HAS_MCP:
         
         try:
             evaluator = SkillEvaluator(skill_path=skill_path)
-            result = evaluator.analyze_skill()
+            result = await asyncio.to_thread(evaluator.analyze_skill)
             
             return [TextContent(
                 type="text",
@@ -97,7 +99,7 @@ if HAS_MCP:
         
         try:
             evaluator = SkillEvaluator(executor_type=executor_type)
-            result = evaluator.check_connectivity(model)
+            result = await asyncio.to_thread(evaluator.check_connectivity, model)
             
             return [TextContent(
                 type="text",

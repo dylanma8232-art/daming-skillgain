@@ -1,6 +1,5 @@
 """API 执行器 - 直接调用模型 API"""
 from __future__ import annotations
-import json
 import os
 from typing import Any
 
