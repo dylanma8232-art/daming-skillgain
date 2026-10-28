@@ -15,7 +15,6 @@ from .engine import (
     analyze_existing_run,
     generate_existing_run_report,
     get_opencode_models,
-    load_config,
     test_model_connectivity,
     print_connectivity_report,
 )

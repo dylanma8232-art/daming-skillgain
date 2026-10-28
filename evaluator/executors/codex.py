@@ -6,7 +6,6 @@ P2 第二/第三宿主 executor。Codex CLI 的非交互执行形态为
 本机未安装 codex CLI 时 validate_config 报告不可用（显式报错，不静默降级）。
 """
 from __future__ import annotations
-import json
 import os
 import subprocess
 from pathlib import Path

@@ -1,6 +1,7 @@
 """REST API Server - 提供 HTTP 接口"""
 
 from __future__ import annotations
+import asyncio
 from typing import Any
 
 try:
@@ -10,6 +11,7 @@ try:
     HAS_FASTAPI = True
 except ImportError:
     HAS_FASTAPI = False
+    app = None
 
 if HAS_FASTAPI:
     app = FastAPI(title="Skill Evaluator API", version="1.0.0")
@@ -38,7 +40,8 @@ if HAS_FASTAPI:
                 executor_config=request.executor_config,
             )
 
-            result = evaluator.run(
+            result = await asyncio.to_thread(
+                evaluator.run,
                 task_prompt=request.task_prompt,
                 models=request.models,
                 voting_models=request.voting_models,
@@ -56,7 +59,7 @@ if HAS_FASTAPI:
 
         try:
             evaluator = SkillEvaluator(skill_path=request.skill_path)
-            return evaluator.analyze_skill()
+            return await asyncio.to_thread(evaluator.analyze_skill)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -67,7 +70,8 @@ if HAS_FASTAPI:
 
         try:
             evaluator = SkillEvaluator(executor_type=executor_type)
-            return {"models": evaluator.list_models()}
+            models = await asyncio.to_thread(evaluator.list_models)
+            return {"models": models}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

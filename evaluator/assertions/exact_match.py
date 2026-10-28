@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from typing import Any
+
+LOGGER = logging.getLogger(__name__)
 
 from .models import AssertionResult, AssertionRule, AssertionType
 
@@ -99,12 +102,15 @@ def evaluate_exact_match(rule: AssertionRule, target_content: Any) -> AssertionR
             actual_val = float(target_content)
         elif isinstance(target_content, str):
             if extract_regex:
-                match = re.search(extract_regex, target_content)
-                if match:
-                    try:
-                        actual_val = float(match.group(1))
-                    except (ValueError, IndexError):
-                        pass
+                try:
+                    match = re.search(extract_regex, target_content)
+                    if match:
+                        try:
+                            actual_val = float(match.group(1))
+                        except (ValueError, IndexError) as err:
+                            LOGGER.debug("extract_regex match group is not a valid float: %s", err)
+                except re.error as err:
+                    LOGGER.warning("Invalid extract_regex '%s': %s", extract_regex, err)
             if actual_val is None:
                 # 尝试直接转浮点或寻找首个数字
                 try:

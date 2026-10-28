@@ -12,8 +12,6 @@ import tempfile
 import time
 import zipfile
 from threading import Lock
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from hashlib import sha256
 from dataclasses import asdict
@@ -1956,8 +1954,6 @@ def run_from_plan(
                     plan_item["model"],
                     "with-skill" if use_skill else "without-skill",
                 )
-                import time
-
                 time.sleep(1.0)
                 continue
             break

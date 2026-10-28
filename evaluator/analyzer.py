@@ -59,6 +59,7 @@ DECISION_PATTERNS = [
     r"我选择[：]\s*(.+)",
     r"采用[：]\s*(.+)",
 ]
+COMPILED_DECISION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in DECISION_PATTERNS]
 
 ASSUMPTION_PATTERNS = [
     r"假设[：:]\s*(.+)",
@@ -66,6 +67,7 @@ ASSUMPTION_PATTERNS = [
     r"默认[：:]\s*(.+)",
     r"假定[：:]\s*(.+)",
 ]
+COMPILED_ASSUMPTION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in ASSUMPTION_PATTERNS]
 
 ERROR_RECOVERY_PATTERNS = [
     r"遇到错误",
@@ -77,6 +79,17 @@ ERROR_RECOVERY_PATTERNS = [
     r"fallback",
     r"备选方案",
 ]
+COMPILED_ERROR_RECOVERY_PATTERNS = [re.compile(p, re.IGNORECASE) for p in ERROR_RECOVERY_PATTERNS]
+
+ERROR_PATTERNS = [
+    r"error",
+    r"exception",
+    r"traceback",
+    r"failed",
+    r"failure",
+    r"fatal",
+]
+COMPILED_ERROR_PATTERNS = [re.compile(p, re.IGNORECASE) for p in ERROR_PATTERNS]
 
 CATEGORY_EXPECTATIONS = {
     "browser_automation": {".md", ".json", ".html", ".htm", ".png"},
@@ -334,16 +347,9 @@ def extract_execution_metrics(stdout_text: str, stderr_text: str) -> dict[str, A
         "execution_time_seconds": None,
     }
     combined = f"{stdout_text}\n{stderr_text}"
-    error_patterns = [
-        r"error",
-        r"exception",
-        r"traceback",
-        r"failed",
-        r"failure",
-        r"fatal",
-    ]
-    for pattern in error_patterns:
-        count = len(re.findall(pattern, combined, re.IGNORECASE))
+    for pattern in COMPILED_ERROR_PATTERNS:
+        matches = pattern.findall(combined)
+        count = len(matches)
         if count > 0:
             metrics["has_errors"] = True
             metrics["error_count"] += count
@@ -498,8 +504,8 @@ def extract_evidence_chain(
                 break
 
     decisions = []
-    for pattern in DECISION_PATTERNS:
-        for match in re.finditer(pattern, combined, re.IGNORECASE):
+    for pattern in COMPILED_DECISION_PATTERNS:
+        for match in pattern.finditer(combined):
             if match.lastindex and match.lastindex >= 1:
                 decision = match.group(1).strip()
                 if decision and len(decision) < 200:
@@ -508,8 +514,8 @@ def extract_evidence_chain(
                 decisions.append(match.group(0).strip()[:100])
 
     assumptions = []
-    for pattern in ASSUMPTION_PATTERNS:
-        for match in re.finditer(pattern, combined, re.IGNORECASE):
+    for pattern in COMPILED_ASSUMPTION_PATTERNS:
+        for match in pattern.finditer(combined):
             if match.lastindex and match.lastindex >= 1:
                 assumption = match.group(1).strip()
                 if assumption and len(assumption) < 200:
@@ -518,8 +524,8 @@ def extract_evidence_chain(
                 assumptions.append(match.group(0).strip()[:100])
 
     error_recoveries = []
-    for pattern in ERROR_RECOVERY_PATTERNS:
-        matches = list(re.finditer(pattern, combined, re.IGNORECASE))
+    for pattern in COMPILED_ERROR_RECOVERY_PATTERNS:
+        matches = list(pattern.finditer(combined))
         if matches:
             for m in matches[:3]:
                 start = max(0, m.start() - 20)

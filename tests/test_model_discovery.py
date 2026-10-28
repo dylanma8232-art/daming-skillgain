@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import subprocess
 from evaluator.model_discovery import ModelDiscovery
 
-def test_opencode_models_subprocess_error(mocker):
+def test_opencode_models_subprocess_error(monkeypatch):
     discovery = ModelDiscovery()
 
     # Mock opencode --version to succeed so we enter the models check
@@ -19,8 +19,8 @@ def test_opencode_models_subprocess_error(mocker):
             raise Exception("Subprocess failed!")
         return MagicMock()
 
-    mocker.patch("subprocess.run", side_effect=mock_subprocess_run)
-    mocker.patch("pathlib.Path.exists", return_value=False) # skip GUI config check
+    monkeypatch.setattr("subprocess.run", mock_subprocess_run)
+    monkeypatch.setattr("pathlib.Path.exists", lambda self: False) # skip GUI config check
 
     result = discovery._detect_opencode()
 
