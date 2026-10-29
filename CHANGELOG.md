@@ -40,3 +40,10 @@
 - **PR #27**: ⚡ Optimize check_phase_completion file scanning and string matching
 - **PR #26**: ⚡ perf: optimize json extraction fallback candidate loop
 - **PR #25**: ⚡ Optimize redundant regex in detect_stuck_state
+
+## 2026-10-29 02:18 迭代
+
+- **PR**：36 ci: add weekly optimization workflow
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/36
+- **改动文件**：
+- .github/workflows/weekly-optimization.yml
