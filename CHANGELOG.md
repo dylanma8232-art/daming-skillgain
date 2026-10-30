@@ -83,3 +83,11 @@
 - **改动文件**：
 - evaluator/sdk.py
 - tests/test_sdk.py
+
+## 2026-10-30 03:51 迭代
+
+- **PR**：47 Fix workflow host executor resolution when instantiated without executor
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/47
+- **改动文件**：
+- evaluator/workflow.py
+- tests/test_workflow_host_resolution.py
