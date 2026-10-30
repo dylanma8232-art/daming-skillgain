@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 import asyncio
+import os
 from typing import Any
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Header, Security, Depends
+    from fastapi.security import APIKeyHeader
     from pydantic import BaseModel
 
     HAS_FASTAPI = True
@@ -14,19 +16,41 @@ except ImportError:
     app = None
 
 if HAS_FASTAPI:
-    app = FastAPI(title="Skill Evaluator API", version="1.0.0")
+    api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+    def verify_api_key(
+        api_key: str = Security(api_key_header),
+        authorization: str = Header(None),
+    ):
+        expected_key = os.environ.get("EVALUATOR_API_KEY") or os.environ.get("API_KEY")
+        if not expected_key:
+            raise HTTPException(status_code=401, detail="API key not configured on server")
+
+        token = api_key
+        if not token and authorization:
+            if authorization.startswith("Bearer "):
+                token = authorization[7:]
+            else:
+                token = authorization
+
+        if not token or token != expected_key:
+            raise HTTPException(status_code=401, detail="Invalid or missing API key")
+        return token
+
+    app = FastAPI(
+        title="Skill Evaluator API",
+        version="1.0.0",
+        dependencies=[Depends(verify_api_key)],
+    )
 
     class EvaluateRequest(BaseModel):
-        skill_path: str
         task_prompt: str
         models: list[str]
         voting_models: list[str] = None
         summary_model: str = None
-        executor_type: str = "opencode"
-        executor_config: dict = None
 
     class AnalyzeRequest(BaseModel):
-        skill_path: str
+        pass
 
     @app.post("/api/evaluate")
     async def evaluate(request: EvaluateRequest):
@@ -34,10 +58,11 @@ if HAS_FASTAPI:
         from .sdk import SkillEvaluator
 
         try:
+            skill_path = os.environ.get("EVALUATOR_SKILL_PATH") or os.environ.get("SKILL_PATH") or "."
+            executor_type = os.environ.get("EVALUATOR_EXECUTOR_TYPE")
             evaluator = SkillEvaluator(
-                skill_path=request.skill_path,
-                executor_type=request.executor_type,
-                executor_config=request.executor_config,
+                skill_path=skill_path,
+                executor_type=executor_type,
             )
 
             result = await asyncio.to_thread(
@@ -53,22 +78,24 @@ if HAS_FASTAPI:
             raise HTTPException(status_code=500, detail=str(e))
 
     @app.post("/api/analyze")
-    async def analyze(request: AnalyzeRequest):
+    async def analyze(request: AnalyzeRequest = None):
         """分析 skill"""
         from .sdk import SkillEvaluator
 
         try:
-            evaluator = SkillEvaluator(skill_path=request.skill_path)
+            skill_path = os.environ.get("EVALUATOR_SKILL_PATH") or os.environ.get("SKILL_PATH") or "."
+            evaluator = SkillEvaluator(skill_path=skill_path)
             return await asyncio.to_thread(evaluator.analyze_skill)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
     @app.get("/api/models")
-    async def list_models(executor_type: str = "opencode"):
+    async def list_models():
         """列出可用模型"""
         from .sdk import SkillEvaluator
 
         try:
+            executor_type = os.environ.get("EVALUATOR_EXECUTOR_TYPE")
             evaluator = SkillEvaluator(executor_type=executor_type)
             models = await asyncio.to_thread(evaluator.list_models)
             return {"models": models}
@@ -81,7 +108,7 @@ if HAS_FASTAPI:
         return {"status": "ok"}
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8000):
+def run_server(host: str = "127.0.0.1", port: int = 8000):
     """启动 API 服务"""
     if not HAS_FASTAPI:
         raise ImportError("需要安装 fastapi 和 uvicorn: pip install fastapi uvicorn")
@@ -89,3 +116,13 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
     import uvicorn
 
     uvicorn.run(app, host=host, port=port)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Skill Evaluator REST API Server")
+    parser.add_argument("--host", default="127.0.0.1", help="Host address to bind")
+    parser.add_argument("--port", type=int, default=8000, help="Port to bind")
+    args = parser.parse_args()
+    run_server(host=args.host, port=args.port)
