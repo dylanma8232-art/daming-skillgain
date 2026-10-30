@@ -662,7 +662,7 @@ def _dedupe_nonempty(values: list[Any], limit: int = 3) -> list[str]:
     result: list[str] = []
     seen: set[str] = set()
     for value in values:
-        text = _compact(str(value or "").strip(), 220)
+        text = _compact_text(str(value or "").strip(), 220)
         if not text or text in seen:
             continue
         seen.add(text)
