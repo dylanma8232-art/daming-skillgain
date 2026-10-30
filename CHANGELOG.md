@@ -67,3 +67,11 @@
 - **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/36
 - **改动文件**：
 - .github/workflows/weekly-optimization.yml
+
+## 2026-10-30 03:51 迭代
+
+- **PR**：45 fix: use _compact_text in report_payload.py
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/45
+- **改动文件**：
+- evaluator/report_payload.py
+- tests/test_report_self_contained.py
