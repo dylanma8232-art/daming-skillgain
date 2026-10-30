@@ -12,11 +12,14 @@ from typing import Any
 # 首屏白话区禁止出现的统计术语（测试与自检共用）
 JARGON_TERMS: tuple[str, ...] = (
     "Δ",
+    "Δ̄",
     "σ",
+    "σ²",
     "CI",
     "置信区间",
     "方差",
     "标准差",
+    "有效样本量",
     "inconclusive",
     "断言",
 )
