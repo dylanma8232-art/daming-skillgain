@@ -17,6 +17,7 @@
 | OpenCode | ① 原生适配器（`--host opencode`） | ✅ 真实端到端已验证（真实 CLI 驱动 + 多次真实评测） |
 | Claude Code | ① 原生适配器（`--host claude-code`）或 ② 脚本契约 | ① 代码+契约测试就绪，真实端到端待验证；② 可用 |
 | Codex | ① 原生适配器（`--host codex`）或 ② 脚本契约 | ① 代码+契约测试就绪，真实端到端待验证；② 可用 |
+| cursor-agent | ① 原生适配器（`--host cursor-agent`） | ✅ 真机 `--version` 探活通过（2026.10.22-27dcf5f）；非交互执行需登录后可用 |
 | Cursor | ② 脚本契约（包装 `cursor-agent` CLI） | 链路同 script 宿主（已验证），具体包装待用户环境实测 |
 | Trae | ② 脚本契约（包装其 CLI / headless） | 同上 |
 | Windsurf | ② 脚本契约（包装 `windsurf`/`cascade` CLI 或 headless） | 同上 |
@@ -55,7 +56,10 @@ python3 -m evaluator.cli run --plan-dir <run目录>
 | `opencode` | `.opencode/skills/` + `opencode.json` 权限放行 | 开箱即用，真实端到端已验证 |
 | `claude-code` | `.claude/skills/` 目录 | 需本机装 claude CLI；executor+适配器+契约测试就绪，真实端到端待验证 |
 | `codex` | 项目根 `AGENTS.md` 注入 | 需本机装 codex CLI；同上待验证 |
+| `cursor-agent` | 项目根 `AGENTS.md` 注入 | 本机已装（`--version` rc=0）；`--list-models` 需登录 |
 | `script` | `.skills/` 目录注入 + 加载验证 | 开箱即用（脚本契约宿主，端到端已验证）；它不是某个具体工具，而是任何工具的接入通道 |
 | `api` / `standalone` / `agent` | 无目录注入 | 需 provider key；无文件操作能力，产物型任务被能力预检显式拦截 |
 
 注意：未安装对应 CLI 的原生适配器（claude-code / codex）在连通性/配置校验阶段显式报错，不静默降级，此时改走脚本契约。每个宿主显式声明能力（`file_ops` / `skill_injection` / `transcript`），不支持的能力显式报错。报告「适用范围」只展示本次实际已测宿主，结论禁止跨宿主外推。
+
+**新增宿主统一按 `references/host-protocol.md` 的三件套（`build_invocation` / `parse_output` / `probe`）接入**；排查工具：`python3 -m evaluator.cli hosts`。
