@@ -1145,6 +1145,8 @@ def cmd_simple(args: argparse.Namespace) -> dict:
         getattr(args, "non_interactive", False)
         or getattr(args, "auto", False)
         or getattr(args, "dry_run", False)
+        or (profile.non_interactive if profile else False)
+        or (profile.dry_run if profile else False)
         or not sys.stdin.isatty()
     )
 
@@ -1218,6 +1220,7 @@ def cmd_simple(args: argparse.Namespace) -> dict:
             pass
 
     wf = SkillEvaluationWorkflow()
+    dry_run = bool(args.dry_run or (profile.dry_run if profile else False))
     if profile is not None:
         config = profile.to_workflow_config(
             skill_path=answers["skill_path"],
@@ -1226,8 +1229,8 @@ def cmd_simple(args: argparse.Namespace) -> dict:
             voting_models=voting_models,
             summary_model=profile.summary_model or voting_models[0],
             host=host,
-            dry_run=bool(args.dry_run),
-            auto=bool(args.auto) or bool(args.dry_run) or non_interactive,
+            dry_run=dry_run,
+            auto=bool(args.auto) or dry_run or non_interactive,
             non_interactive=non_interactive,
         )
     else:
@@ -1245,8 +1248,8 @@ def cmd_simple(args: argparse.Namespace) -> dict:
             "host": host,
             "host_config": _parse_host_config(getattr(args, "host_config", None)),
             "parallelism": getattr(args, "parallelism", None),
-            "dry_run": bool(args.dry_run),
-            "auto": bool(args.auto) or bool(args.dry_run) or non_interactive,
+            "dry_run": dry_run,
+            "auto": bool(args.auto) or dry_run or non_interactive,
             "non_interactive": non_interactive,
             "repetitions": getattr(args, "repetitions", None),
         }

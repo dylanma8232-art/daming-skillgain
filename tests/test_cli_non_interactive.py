@@ -49,6 +49,7 @@ def test_simple_profile_fills_answers(monkeypatch, tmp_path: Path):
         "models": ["m1", "m2"],
         "voting_models": ["j1"],
         "summary_model": "j1",
+        "dry_run": True,
     }
     profile_path = tmp_path / "eval-config.json"
     profile_path.write_text(json.dumps(profile), encoding="utf-8")
@@ -67,6 +68,7 @@ def test_simple_profile_fills_answers(monkeypatch, tmp_path: Path):
     assert captured["models"] == ["m1", "m2"]
     assert captured["non_interactive"] is True
     assert captured["auto"] is True
+    assert captured["dry_run"] is True
 
 
 def test_simple_bad_profile_returns_error():
