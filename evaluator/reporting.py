@@ -18,6 +18,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 from .report_payload import (  # noqa: F401  (向后兼容 re-export)
+    build_first_screen_payload,
+    check_report_self_contained,
     load_blind_vote_data,
     _summarize_vote_reasons,
     safe_read_text,
@@ -36,6 +38,10 @@ from .report_payload import (  # noqa: F401  (向后兼容 re-export)
     _load_p1_payload,
 )
 from .report_template import (  # noqa: F401  (向后兼容 re-export)
+    _render_case_checklist,
+    _render_compare_cards,
+    _render_first_screen_hero,
+    _render_first_screen_kpis,
     _compact,
     _list_text,
     _safe_int,
@@ -80,50 +86,53 @@ from .report_template import (  # noqa: F401  (向后兼容 re-export)
 
 
 def render_report_html(payload: dict[str, Any]) -> str:
-    groups = payload.get("grouped_results", []) or []
-    task_prompt = _compact(payload.get("task_prompt", ""), 320)
-    target_skill = html.escape(str(payload.get("target_skill") or "未指定"))
-    tested_models = payload.get("tested_models", [])
-    judge_models = payload.get("judge_models", [])
-    tested_line = "、".join(str(m) for m in tested_models) if tested_models else "暂无"
-    judge_line = "、".join(str(m) for m in judge_models) if judge_models else "评委未记录"
-    total_with_votes = sum(_safe_int(g.get("with_votes")) for g in groups)
-    total_without_votes = sum(_safe_int(g.get("without_votes")) for g in groups)
-    total_votes = total_with_votes + total_without_votes
-    with_best = payload.get("with_skill_best")
-    without_best = payload.get("without_skill_best")
-
+    """R2：结论先行首屏（verdict 大字 → 三指标 → 红绿清单 → 有/无对比卡片），明细折叠。"""
+    first = build_first_screen_payload(payload)
     model_result_html = _render_model_result_sections(payload)
     stats_html = _render_statistics_section(payload.get("statistics"))
     snapshot_html = _render_snapshot_section(payload.get("assertions_snapshot"))
     p1_payload = payload.get("p1")
-    plain_summary_html = _render_plain_summary_section(payload)
     p1_alerts_html = _render_p1_negative_alerts(p1_payload)
     p1_details_html = _render_p1_pair_details(p1_payload)
-    # ② 负迁移警报：仅在确实检出负迁移时才展示（「如有」才渲染整个区块）
+
+    # ② 负迁移警报：只在真的检出负迁移时展示，且排在对比卡片之前
     neg_alert_block = (
-        f"<section class='section'><div class='section-head'><h2>② 负迁移警报</h2>"
-        f"<span class='section-note'>如果带 skill 反而更差，这里会醒目提示</span></div>{p1_alerts_html}</section>"
+        f"<section class='section' style='border:2px solid #dc2626;'>"
+        f"<div class='section-head'><h2>⚠️ 这些模型上带 skill 反而更差</h2>"
+        f"<span class='section-note'>建议在这些模型上关闭</span></div>{p1_alerts_html}</section>"
         if p1_alerts_html else ""
+    )
+
+    host_boundary = payload.get("host_boundary") or {}
+    tested_hosts = "、".join(host_boundary.get("tested_hosts", []) or []) or "未记录"
+    host_line = (
+        "<p class='section-note' style='margin:14px 0 0;'>"
+        f"本次使用的 AI 工具：<strong>{html.escape(tested_hosts)}</strong>。"
+        f"{html.escape(str(host_boundary.get('statement', '')))}</p>"
     )
 
     return f"""<!DOCTYPE html>
 <html lang='zh-CN'>
 <head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Skill 评测报告 - {html.escape(str(payload.get('evaluation_name', '')))}</title><style>{_report_css()}</style></head>
 <body><main class='page'>
-<header class='hero'><div class='hero-top'><div><h1>Skill 评测报告</h1><p>让每个模型分别「带 skill」和「不带 skill」完成同一个任务，再由评委打分，告诉你这个 skill 到底该不该开。</p></div><div class='verdict-badge'>{_verdict_pill((p1_payload or {}).get('pair_gains', [{}])[0].get('verdict', 'inconclusive') if p1_payload and p1_payload.get('pair_gains') else 'inconclusive')}</div></div><div class='meta-grid'><div class='meta'><span>被测 Skill</span><strong>{target_skill}</strong></div><div class='meta'><span>用户任务</span><strong>{html.escape(task_prompt or '未记录')}</strong></div><div class='meta'><span>测试模型</span><strong>{html.escape(tested_line)}</strong></div><div class='meta'><span>评委模型</span><strong>{html.escape(judge_line)}</strong></div></div></header>
-<section class='section' style='border:2px solid #b45309;background:#fffbeb;border-radius:12px;padding:16px 20px;'><div class='section-head'><h2>⚠️ 这次是用什么工具测的</h2><span class='section-note'>换一个 AI 工具，结果可能会不一样</span></div><p style='margin:8px 0 0;font-size:14px;line-height:1.7;'><strong>本次使用的 AI 工具:</strong> {html.escape('、'.join((payload.get('host_boundary') or {}).get('tested_hosts', [])) or '未记录')}</p><p style='margin:8px 0 0;font-size:14px;line-height:1.7;'>{html.escape(str((payload.get('host_boundary') or {}).get('statement', '')))}</p></section>
-<section class='section'><div class='section-head'><h2>① 总结</h2><span class='section-note'>三句话以内说清这次评测结果</span></div>{plain_summary_html}</section>
-{neg_alert_block}<section class='section'><div class='section-head'><h2>③ 按模型看结果</h2><span class='section-note'>每个模型一个完整区块：结论、评委打分与评价、带 / 不带 skill 主交付物对照、诊断；过程证据与统计口径收在技术细节里</span></div>{model_result_html}</section>
-<details class='tech-section'><summary>④ 配对明细与统计口径（点开看完整数据）</summary><div class='tech-section-body'>
-<section class='section'><div class='section-head'><h2>配对明细与评委打分一致性</h2><span class='section-note'>每对任务 × 每轮投票的配对差值、评委一致率（同一配对内评委同判定比例）与人审触发记录</span></div>{p1_details_html}</section>
-<section class='section'><div class='section-head'><h2>统计口径明细（技术视角）</h2><span class='section-note'>有效样本量、配对差值、波动范围等统计口径，仅作复核用</span></div>{stats_html}</section>
+{_render_first_screen_hero(first, payload)}
+<section class='section'>{_render_first_screen_kpis(first)}{host_line}</section>
+{neg_alert_block}
+<section class='section'><div class='section-head'><h2>✅❌ 自动检查结果（逐条）</h2><span class='section-note'>绿色=通过，红色=没通过；每条都说人话原因</span></div>{_render_case_checklist(first)}</section>
+<section class='section'><div class='section-head'><h2>带 Skill vs 不带 Skill</h2><span class='section-note'>每个模型一张卡：评委票数 + 一句人话结论</span></div>{_render_compare_cards(first)}</section>
+<details class='tech-section'><summary>按模型看完整结果（评委评价、交付物对照、诊断）</summary><div class='tech-section-body'>
+<section class='section'>{model_result_html}</section>
 </div></details>
-<details class='tech-section'><summary>⑤ 附录（自动检查规则快照 / 证据链）</summary><div class='tech-section-body'>
-<section class='section'><div class='section-head'><h2>自动检查规则快照</h2><span class='section-note'>同一份产出重查多少遍结果都一样，可复验</span></div>{snapshot_html}</section>
+<details class='tech-section'><summary>配对明细与统计口径（点开看完整数据）</summary><div class='tech-section-body'>
+<section class='section'><div class='section-head'><h2>配对明细与评委打分一致性</h2><span class='section-note'>每对任务 × 每轮投票的差值、评委看法一致的比例与需要人工复核的记录</span></div>{p1_details_html}</section>
+<section class='section'><div class='section-head'><h2>统计口径明细（复核用）</h2><span class='section-note'>对比了几组、平均差值、波动大小等，仅作复核</span></div>{stats_html}</section>
+</div></details>
+<details class='tech-section'><summary>附录（自动检查规则存档 / 证据链）</summary><div class='tech-section-body'>
+<section class='section'><div class='section-head'><h2>自动检查规则存档</h2><span class='section-note'>同一份产出重查多少遍结果都一样，可复验</span></div>{snapshot_html}</section>
 <section class='section'><div class='section-head'><h2>证据链与可信度</h2><span class='section-note'>透明化的底层记录，确保每项判断均可追溯</span></div><div class='evidence-grid'><div class='evidence'><strong>跑前体检记录</strong><span>开跑前确认输入文件与环境就绪，记录保存在 run 目录中。</span></div><div class='evidence'><strong>空产出自动过滤</strong><span>评委打分阶段会跳过没交出东西的实验。</span></div><div class='evidence'><strong>评委原始输出</strong><span>投票依据保存在 blind_vote/evaluations.json。</span></div><div class='evidence'><strong>实验全流程追溯</strong><span>包括 stdout、stderr、transcript 及全量 artifacts。</span></div></div></section>
 </div></details>
 </main><script>{_report_js()}</script></body></html>"""
+
 
 def generate_run_report(run_dir: Path, output_path: Path | None = None) -> Path:
     manifest_path = run_dir / "run_manifest.json"

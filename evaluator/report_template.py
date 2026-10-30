@@ -102,6 +102,17 @@ def _hydrate_artifact(item: dict[str, Any] | None, artifact: dict[str, Any]) -> 
         base["name"] = Path(path).name
     return base
 
+# R6/R7: 单文件内联预算（超过预算不再无条件 base64，避免单文件体积失控）
+INLINE_BUDGET_BYTES = 20 * 1024 * 1024
+
+
+def _inline_allowed(path: Path) -> bool:
+    try:
+        return path.exists() and path.is_file() and path.stat().st_size <= INLINE_BUDGET_BYTES
+    except OSError:
+        return False
+
+
 def _artifact_href(item: dict[str, Any] | None, artifact: dict[str, Any], use_data_uri: bool = False) -> str:
     path = _artifact_abs_path(item, artifact)
     run_dir = Path(str((item or {}).get("run_dir") or ""))
@@ -110,7 +121,7 @@ def _artifact_href(item: dict[str, Any] | None, artifact: dict[str, Any], use_da
         return quote(value.replace("\\", "/"), safe="/:#?&=%+~@!$,;'()*[]")
 
     try:
-        if use_data_uri and path.exists() and path.is_file():
+        if use_data_uri and _inline_allowed(path):
             with open(path, "rb") as f:
                 data = base64.b64encode(f.read()).decode("ascii")
             ext = path.suffix.lower()
@@ -306,8 +317,41 @@ def _render_slide_deck(slides: list[dict[str, str]]) -> str:
       </div>
     """
 
+def _render_oversize_placeholder(artifact: dict[str, Any], path: Path, size: int) -> str:
+    """R7: 超内联预算的大文件 → 纯 SVG 摘要占位（文件名/大小/前 N 行文本）。"""
+    name = str(artifact.get("path") or artifact.get("name") or path.name)
+    first_lines = ""
+    if path.suffix.lower() in {".md", ".txt", ".csv", ".json", ".html", ".htm"}:
+        try:
+            first_lines = "\n".join(
+                path.read_text(encoding="utf-8", errors="replace").splitlines()[:8]
+            )
+        except OSError:
+            first_lines = ""
+    size_mb = size / (1024 * 1024)
+    text = (
+        f"{name}（{size_mb:.1f} MB，超过单文件内联预算 "
+        f"{INLINE_BUDGET_BYTES // (1024 * 1024)} MB，未内联）"
+    )
+    if first_lines:
+        text += "\n前几行：\n" + first_lines
+    return (
+        "<div class='result-note'>"
+        f"<strong>大文件摘要（未内联，报告仍可单文件拷走）</strong>"
+        f"<pre style='margin:8px 0 0;white-space:pre-wrap;'>{html.escape(text)}</pre>"
+        "<p style='margin:8px 0 0;'>完整文件请到本机 run 目录查看："
+        f"<code>{html.escape(str(path))}</code></p></div>"
+    )
+
+
 def _render_artifact_preview(item: dict[str, Any] | None, artifact: dict[str, Any], primary: bool = False) -> str:
     path = _artifact_abs_path(item, artifact)
+    try:
+        oversize = path.exists() and path.stat().st_size > INLINE_BUDGET_BYTES
+    except OSError:
+        oversize = False
+    if oversize and primary:
+        return _render_oversize_placeholder(artifact, path, path.stat().st_size)
     kind = _artifact_kind(path, artifact)
     href = _artifact_href(item, artifact, use_data_uri=primary)
     name = artifact.get("path") or artifact.get("name") or path.name or "artifact"
@@ -828,7 +872,7 @@ def _render_p1_pair_details(p1: dict[str, Any] | None) -> str:
         model = html.escape(str(pg.get("model", "?")))
         for d in (pg.get("deltas", []) or []):
             rows.append(
-                f"<tr><td>{model}</td><td>rep{html.escape(str(d.get('repetition', '?')))}</td>"
+                f"<tr><td>{model}</td><td>第 {html.escape(str(d.get('repetition', '?')))} 轮</td>"
                 f"<td>{float(d.get('with_value', 0.0)):.1f}</td><td>{float(d.get('without_value', 0.0)):.1f}</td>"
                 f"<td class='{'pos' if float(d.get('delta', 0)) > 0 else ('neg' if float(d.get('delta', 0)) < 0 else '')}'><strong>{float(d.get('delta', 0.0)):+.2f}</strong></td></tr>"
             )
@@ -836,7 +880,7 @@ def _render_p1_pair_details(p1: dict[str, Any] | None) -> str:
     if rows:
         table_html = (
             "<table style='width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;'>"
-            "<tr style='text-align:left;border-bottom:2px solid #e5e7eb;'><th>模型</th><th>重复轮次</th><th>With</th><th>Without</th><th>配对 Δ</th></tr>"
+            "<tr style='text-align:left;border-bottom:2px solid #e5e7eb;'><th>模型</th><th>第几轮</th><th>带 Skill</th><th>不带 Skill</th><th>差值</th></tr>"
             + "".join(rows) + "</table>"
         )
     else:
@@ -850,7 +894,7 @@ def _render_p1_pair_details(p1: dict[str, Any] | None) -> str:
     for r in (ja.get("per_round", []) or []):
         r_rate = r.get("agreement_rate")
         per_round_rows.append(
-            f"<tr><td>{html.escape(str(r.get('model', '?')))}</td><td>rep{html.escape(str(r.get('repetition', 1)))}</td>"
+            f"<tr><td>{html.escape(str(r.get('model', '?')))}</td><td>第 {html.escape(str(r.get('repetition', 1)))} 轮</td>"
             f"<td>round {r.get('round', 0)}</td><td>{r.get('judge_count', 0)}</td>"
             f"<td>{r.get('agree_pairs', 0)}/{r.get('comparable_pairs', 0)}</td>"
             f"<td>{f'{float(r_rate):.0%}' if r_rate is not None else '—'}</td></tr>"
@@ -858,10 +902,10 @@ def _render_p1_pair_details(p1: dict[str, Any] | None) -> str:
     agreement_html = ""
     if per_round_rows:
         agreement_html = (
-            f"<p><strong>评委一致率（口径：同一配对内评委同判定比例）：</strong>整体均值 {rate_str}"
+            f"<p><strong>评委看法一致的比例（同一组里评委给出同样判断的比例）：</strong>整体均值 {rate_str}"
             f"（同判定 {ja.get('overall_agree_pairs', 0)} / 总可比 {ja.get('overall_comparable_pairs', 0)}）</p>"
             "<table style='width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;'>"
-            "<tr style='text-align:left;border-bottom:2px solid #e5e7eb;'><th>模型</th><th>重复</th><th>轮次</th><th>评委数</th><th>同判定/总可比</th><th>一致率</th></tr>"
+            "<tr style='text-align:left;border-bottom:2px solid #e5e7eb;'><th>模型</th><th>第几轮</th><th>轮次</th><th>评委数</th><th>同判定/总可比</th><th>一致率</th></tr>"
             + "".join(per_round_rows) + "</table>"
         )
     else:
@@ -876,7 +920,7 @@ def _render_p1_pair_details(p1: dict[str, Any] | None) -> str:
                 f"<strong>{html.escape(str(t.get('model', '?')))}</strong> · 触发类型 {html.escape(str(trig.get('type', '')))}: "
                 f"{html.escape(str(trig.get('reason', '')))}<br><span class='small-reason'>{html.escape(str(trig.get('detail', '')))}</span></div>"
             )
-    trigger_html = ("<p><strong>人审按需触发记录（无法判定 / 分歧大 / 高风险）：</strong></p>" + "".join(trigger_rows)) if trigger_rows else \
+    trigger_html = ("<p><strong>需要人工复核的记录（没法判定 / 分歧大 / 高风险）：</strong></p>" + "".join(trigger_rows)) if trigger_rows else \
         "<p class='small-reason'>无模型触发人审条件。</p>"
 
     return f"{table_html}{agreement_html}{trigger_html}"
@@ -902,10 +946,10 @@ def _render_statistics_section(stats: dict[str, Any] | None) -> str:
     return f"""
       {warning_html}
       <div class='kpi-grid'>
-        <div class='kpi'><span>有效样本量 (N)</span><strong>{n_valid} 对</strong><p>总计划模型 {n_total} 组，排除基础设施 invalid {invalid_cnt} 次</p></div>
-        <div class='kpi good'><span>平均配对差值 (Δ̄)</span><strong>{mean_d:+.2f} 票</strong><p>With-Skill 得票减 Without-Skill 得票期望值</p></div>
-        <div class='kpi blue'><span>配对差值标准差 (σ)</span><strong>{sd:.2f}</strong><p>样本方差 σ² = {var:.2f}</p></div>
-        <div class='kpi warn'><span>成对胜负分布</span><strong>{w_wins} 胜 / {wo_wins} 负 / {ties} 平</strong><p>开 Skill 相对不开 Skill 的单模型对比结果</p></div>
+        <div class='kpi'><span>对比了几组</span><strong>{n_valid} 组</strong><p>共 {n_total} 组实验，其中 {invalid_cnt} 次因基础设施故障没算进来</p></div>
+        <div class='kpi good'><span>平均差值</span><strong>{mean_d:+.2f} 票</strong><p>带 skill 比不带 skill 平均多/少拿多少票</p></div>
+        <div class='kpi blue'><span>波动大小</span><strong>{sd:.2f}</strong><p>数值越小，说明结果越稳定</p></div>
+        <div class='kpi warn'><span>成对胜负分布</span><strong>{w_wins} 胜 / {wo_wins} 负 / {ties} 平</strong><p>带 Skill 相对不带 Skill 的单模型对比结果</p></div>
       </div>
     """
 
@@ -919,10 +963,130 @@ def _render_snapshot_section(snapshot: dict[str, Any] | None) -> str:
 
     return f"""
       <div class='kpi-grid'>
-        <div class='kpi'><span>断言引擎版本</span><strong>v{ver}</strong><p>固定判定版本号</p></div>
-        <div class='kpi good'><span>规则快照数</span><strong>{rules_cnt} 条</strong><p>覆盖 exact_match / contains_facts / recomputable / script_eval</p></div>
-        <div class='kpi blue'><span>比对落盘记录</span><strong>{records_cnt} 项</strong><p>记录输入、实际输出与断言证据</p></div>
-        <div class='kpi warn'><span>确定性执行保障</span><strong>零 LLM 调用</strong><p>快照时间: {created_at[:19] if created_at else '已固定'}</p></div>
+        <div class='kpi'><span>自动检查版本</span><strong>v{ver}</strong><p>固定版本号，换版本结果可比性会变</p></div>
+        <div class='kpi good'><span>自动检查规则存档</span><strong>{rules_cnt} 条</strong><p>都是固定规则，不看模型发挥</p></div>
+        <div class='kpi blue'><span>检查记录</span><strong>{records_cnt} 项</strong><p>每项都留了输入、实际输出和判断依据</p></div>
+        <div class='kpi warn'><span>结果可复现</span><strong>纯规则计算，不靠大模型</strong><p>存档时间: {created_at[:19] if created_at else '已固定'}</p></div>
       </div>
     """
 
+
+
+# ==========================================================================
+# R2-R5: 结论先行首屏四件套（渲染层）
+# ==========================================================================
+def _render_first_screen_hero(first: dict[str, Any], payload: dict[str, Any]) -> str:
+    verdict = str(first.get("verdict") or "inconclusive")
+    tone = {
+        "skill_effective": "var(--green)",
+        "negative_migration": "#dc2626",
+        "inconclusive": "#64748b",
+    }.get(verdict, "#64748b")
+    target_skill = html.escape(str(payload.get("target_skill") or "未指定"))
+    tested_models = payload.get("tested_models", [])
+    tested_line = "、".join(str(m) for m in tested_models) if tested_models else "暂无"
+    return f"""
+    <header class='hero'>
+      <div class='hero-top'>
+        <div>
+          <div class='section-note' style='color:#94a3b8;'>被测 Skill：{target_skill} · 测试模型：{html.escape(tested_line)}</div>
+          <h1 style='font-size:clamp(26px,4vw,38px);line-height:1.25;margin:8px 0 10px;'>
+            {html.escape(str(first.get("headline") or ""))}
+          </h1>
+          <p style='margin:0;font-size:15px;line-height:1.75;color:#cbd5e1;max-width:760px;'>
+            {html.escape(str(first.get("detail") or ""))}
+          </p>
+        </div>
+        <div class='verdict-badge' style='background:{tone};'>{html.escape(str(first.get("verdict_label") or ""))}</div>
+      </div>
+    </header>
+    """
+
+
+def _render_first_screen_kpis(first: dict[str, Any]) -> str:
+    cards = []
+    for kpi in first.get("kpis") or []:
+        tone = kpi.get("tone") or ""
+        cls = "kpi" + (f" {tone}" if tone in {"good", "warn"} else "")
+        cards.append(
+            f"<div class='{cls}'><span>{html.escape(str(kpi.get('label', '')))}</span>"
+            f"<strong>{html.escape(str(kpi.get('value', '')))}</strong>"
+            f"<p>{html.escape(str(kpi.get('hint', '')))}</p></div>"
+        )
+    return f"<div class='kpi-grid'>{''.join(cards)}</div>"
+
+
+def _render_case_checklist(first: dict[str, Any], limit: int = 12) -> str:
+    cases = first.get("cases") or []
+    if not cases:
+        return "<p class='small-reason'>这次没有自动检查的逐条记录（可能未生成规则快照）。</p>"
+    passed = int(first.get("cases_passed", 0))
+    failed = int(first.get("cases_failed", 0))
+    head = (
+        f"<p class='section-note' style='margin:0 0 10px;'>"
+        f"自动检查 {len(cases)} 条：<strong style='color:#047857;'>通过 {passed} 条</strong> · "
+        f"<strong style='color:#b91c1c;'>失败 {failed} 条</strong></p>"
+    )
+    items = []
+    for case in cases[:limit]:
+        ok = bool(case.get("passed"))
+        icon = "✓" if ok else "✗"
+        color = "#047857" if ok else "#b91c1c"
+        bg = "var(--green-soft)" if ok else "#fef2f2"
+        border = "var(--green-border)" if ok else "#fecaca"
+        items.append(
+            f"<li style='list-style:none;padding:8px 12px;border:1px solid {border};"
+            f"background:{bg};border-radius:8px;font-size:13px;line-height:1.55;'>"
+            f"<strong style='color:{color};'>{icon} {html.escape(str(case.get('name', '')))}</strong>"
+            f"<span class='section-note'> · {html.escape(str(case.get('model', '')))}"
+            f" · {html.escape(str(case.get('mode', '')))} · 第 {html.escape(str(case.get('repetition', '?')))} 轮</span>"
+            f"<div style='margin-top:2px;color:#334155;'>{html.escape(str(case.get('reason', '')))}</div></li>"
+        )
+    more = ""
+    if len(cases) > limit:
+        more = f"<p class='small-reason'>还有 {len(cases) - limit} 条，展开下方「按模型看结果」或附录查看。</p>"
+    return head + "<ul style='display:grid;gap:8px;padding:0;margin:0;'>" + "".join(items) + "</ul>" + more
+
+
+def _render_compare_cards(first: dict[str, Any]) -> str:
+    models = first.get("models") or []
+    if not models:
+        return "<p class='small-reason'>没有可对比的模型结果。</p>"
+    cards = []
+    for item in models:
+        tone = {
+            "skill_effective": "green",
+            "negative_migration": "red",
+            "inconclusive": "gray",
+        }.get(str(item.get("verdict")), "gray")
+        with_votes = int(item.get("with_votes", 0) or 0)
+        without_votes = int(item.get("without_votes", 0) or 0)
+        total_votes = with_votes + without_votes
+        pct = (with_votes / total_votes * 100) if total_votes else 0
+        cards.append(
+            f"""
+      <div class='compare-card'>
+        <div class='compare-head'>
+          <h3>{html.escape(str(item.get('model', '?')))}</h3>
+          <span class='pill {tone}'>{html.escape(str(item.get('verdict_label', '')))}</span>
+        </div>
+        <div class='compare-grid'>
+          <div class='compare-side'>
+            <strong style='font-size:13px;color:#047857;'>带 Skill</strong>
+            <p style='margin:4px 0 0;font-size:20px;font-weight:800;'>{with_votes} 票</p>
+            <span class='section-note'>主交付物 {int(item.get('with_artifacts', 0) or 0)} 个</span>
+          </div>
+          <div class='compare-side'>
+            <strong style='font-size:13px;color:#1d4ed8;'>不带 Skill</strong>
+            <p style='margin:4px 0 0;font-size:20px;font-weight:800;'>{without_votes} 票</p>
+            <span class='section-note'>主交付物 {int(item.get('without_artifacts', 0) or 0)} 个</span>
+          </div>
+        </div>
+        <div style='padding:0 14px 14px;'>
+          <div class='vote-bar' style='margin-top:8px;'><div class='vote-with' style='width:{pct:.0f}%;'>带 {with_votes}</div><div class='vote-without' style='width:{100 - pct:.0f}%;'>不带 {without_votes}</div></div>
+          <p class='plain-note' style='margin-top:10px;'>{html.escape(str(item.get('plain', '')))}</p>
+        </div>
+      </div>
+      """
+        )
+    return "".join(cards)

@@ -682,3 +682,168 @@ def _load_p1_payload(run_dir: Path) -> dict[str, Any] | None:
         LOGGER.warning("读取 P1 配对增益数据失败: %s", e)
         return None
 
+
+
+# ==========================================================================
+# R2/R4/R5: 首屏 payload（纯数据，结论先行）
+# ==========================================================================
+_VERDICT_LABELS = {
+    "skill_effective": ("明确有效", "带这个 skill 明显更好，建议开启"),
+    "negative_migration": ("明确有害", "带这个 skill 反而更差，建议关闭"),
+    "inconclusive": ("没法下结论", "这次没测出明显区别"),
+}
+
+
+def _compact_text(text: str, limit: int = 200) -> str:
+    clean = " ".join(str(text or "").split())
+    return clean if len(clean) <= limit else clean[: limit - 1] + "…"
+
+
+def build_first_screen_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """把报告 payload 收敛成首屏四件套所需的纯数据。
+
+    返回：
+    - verdict: 总判定（任一模型明确有害则整体判「有害」，全部有效判「有效」，否则没法下结论）
+    - headline: 一句话结论
+    - kpis: 三个关键指标（结论分布 / 评委总票 / 平均差值）
+    - models: 每模型有/无对比卡片数据
+    - cases: 红绿用例清单（逐条）
+    """
+    groups = payload.get("grouped_results") or []
+    p1 = payload.get("p1") or {}
+    pair_gains = p1.get("pair_gains") or []
+    stats = payload.get("statistics") or {}
+
+    effective = sum(1 for pg in pair_gains if pg.get("verdict") == "skill_effective")
+    harmful = sum(1 for pg in pair_gains if pg.get("verdict") == "negative_migration")
+    unclear = max(len(pair_gains) - effective - harmful, 0)
+    if not pair_gains:
+        unclear = len(groups)
+
+    if harmful:
+        verdict = "negative_migration"
+    elif effective and not harmful:
+        verdict = "skill_effective"
+    elif pair_gains:
+        verdict = "inconclusive"
+    else:
+        verdict = "inconclusive"
+
+    label, default_headline = _VERDICT_LABELS.get(verdict, (verdict, ""))
+    # R5：主结论固定一句话（大字），补充说明最多两句（小字）
+    headline = default_headline or build_plain_summary(pair_gains, groups)
+    detail = build_plain_summary(pair_gains, groups)
+
+    total_with = sum(int(g.get("with_votes", 0) or 0) for g in groups)
+    total_without = sum(int(g.get("without_votes", 0) or 0) for g in groups)
+    mean_delta = float(stats.get("mean_delta", 0.0) or 0.0)
+    n_valid = int(stats.get("sample_size_valid", 0) or 0)
+    invalid = int(stats.get("invalid_runs_count", 0) or 0)
+
+    kpis = [
+        {
+            "key": "verdicts",
+            "label": "结论分布",
+            "value": f"有效 {effective} / 有害 {harmful} / 没结论 {unclear}",
+            "hint": f"共 {len(groups)} 个模型各测了一遍「带」和「不带」",
+            "tone": "good" if verdict == "skill_effective" else ("warn" if verdict == "negative_migration" else ""),
+        },
+        {
+            "key": "votes",
+            "label": "评委总票",
+            "value": f"带 {total_with} : 不带 {total_without}",
+            "hint": "评委匿名打分，不知道哪份是带 skill 的",
+            "tone": "good" if total_with > total_without else ("warn" if total_without > total_with else ""),
+        },
+        {
+            "key": "delta",
+            "label": "平均差值",
+            "value": f"{mean_delta:+.1f} 票",
+            "hint": f"对比了 {n_valid} 组；基础设施故障 {invalid} 次未计入",
+            "tone": "good" if mean_delta > 0 else ("warn" if mean_delta < 0 else ""),
+        },
+    ]
+
+    models: list[dict[str, Any]] = []
+    for group in groups:
+        model = str(group.get("model", "?"))
+        pg = next((item for item in pair_gains if item.get("model") == model), {})
+        model_verdict = pg.get("verdict") or "inconclusive"
+        model_label = _VERDICT_LABELS.get(model_verdict, (model_verdict, ""))[0]
+        plain = verdict_to_plain_language(
+            model_verdict,
+            model=model,
+            n=int(pg.get("n_paired", 0) or 0),
+            mean_delta=float(pg.get("mean_delta", 0.0) or 0.0),
+            primary_metric=str(pg.get("primary_metric") or "assertion"),
+        )
+        with_payload = group.get("with_skill") or {}
+        without_payload = group.get("without_skill") or {}
+        models.append(
+            {
+                "model": model,
+                "verdict": model_verdict,
+                "verdict_label": model_label,
+                "plain": plain,
+                "with_votes": int(group.get("with_votes", 0) or 0),
+                "without_votes": int(group.get("without_votes", 0) or 0),
+                "with_artifacts": len(with_payload.get("artifacts") or []) if isinstance(with_payload, dict) else 0,
+                "without_artifacts": len(without_payload.get("artifacts") or []) if isinstance(without_payload, dict) else 0,
+                "n_paired": int(pg.get("n_paired", 0) or 0),
+                "mean_delta": float(pg.get("mean_delta", 0.0) or 0.0),
+            }
+        )
+
+    cases: list[dict[str, Any]] = []
+    snapshot = payload.get("assertions_snapshot") or {}
+    for record in snapshot.get("records") or []:
+        if not isinstance(record, dict):
+            continue
+        model = str(record.get("model", "?"))
+        mode = "带 Skill" if record.get("use_skill") else "不带 Skill"
+        repetition = record.get("repetition", "?")
+        for result in record.get("results") or []:
+            if not isinstance(result, dict):
+                continue
+            passed = bool(result.get("passed"))
+            reason = str(result.get("message") or result.get("error") or "").strip()
+            if not reason:
+                reason = "自动检查通过" if passed else "自动检查未通过"
+            cases.append(
+                {
+                    "model": model,
+                    "mode": mode,
+                    "repetition": repetition,
+                    "name": str(result.get("name") or "未命名检查"),
+                    "passed": passed,
+                    "reason": _compact_text(to_plain_language(reason), 140),
+                }
+            )
+
+    return {
+        "verdict": verdict,
+        "verdict_label": label,
+        "headline": headline,
+        "detail": detail,
+        "kpis": kpis,
+        "models": models,
+        "cases": cases,
+        "cases_passed": sum(1 for c in cases if c["passed"]),
+        "cases_failed": sum(1 for c in cases if not c["passed"]),
+    }
+
+
+def check_report_self_contained(html_text: str) -> list[str]:
+    """R8 自检：报告必须自包含（无外链 / 无外部 link / 无外部 script src）。"""
+    problems: list[str] = []
+    lowered = (html_text or "").lower()
+    for marker in ("<link", "src=\"http://", "src='http://", "src=\"https://", "src='https://"):
+        if marker in lowered:
+            problems.append(f"发现外部引用: {marker}")
+    for match in re.finditer(r"""https?://([^\s"'<>]+)""", html_text or ""):
+        url = match.group(0)
+        # 允许注释/文本里出现的说明性 URL 仅限 svg 命名空间
+        if "www.w3.org" in url:
+            continue
+        problems.append(f"发现外链: {url}")
+    return sorted(set(problems))
