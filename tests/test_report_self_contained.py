@@ -112,3 +112,57 @@ def test_report_is_self_contained():
 def test_self_check_catches_external_links():
     problems = check_report_self_contained("<link rel='x' href='y'><script src='https://x/y.js'></script>")
     assert problems
+
+
+def test_build_report_payload_with_blind_critiques(tmp_path):
+    import json
+    from evaluator.report_payload import build_report_payload
+
+    run_dir = tmp_path / "run_dir"
+    run_dir.mkdir()
+    blind_vote_dir = run_dir / "blind_vote"
+    blind_vote_dir.mkdir()
+
+    evaluations_content = [
+        {
+            "voting_model": "judge-1",
+            "evaluations": [
+                {
+                    "workspace_evaluations": {
+                        "方案A": "ws_with",
+                        "方案B": "ws_without",
+                    },
+                    "reasons": {
+                        "方案A": "Critique for Scheme A from Judge 1",
+                        "方案B": "Critique for Scheme B from Judge 1",
+                    },
+                }
+            ],
+        }
+    ]
+    (blind_vote_dir / "evaluations.json").write_text(json.dumps(evaluations_content), encoding="utf-8")
+
+    manifest = {
+        "evaluation_name": "test_eval",
+        "target_skill": "test_skill",
+        "task_prompt": "test prompt",
+        "results": [
+            {
+                "model": "model_1",
+                "use_skill": True,
+                "workspace_dir": str(run_dir / "ws_with"),
+            },
+            {
+                "model": "model_1",
+                "use_skill": False,
+                "workspace_dir": str(run_dir / "ws_without"),
+            },
+        ],
+    }
+
+    payload = build_report_payload(run_dir, manifest)
+    assert "grouped_results" in payload
+    assert len(payload["grouped_results"]) == 1
+    group = payload["grouped_results"][0]
+    assert group["with_judge_reviews"] == ["Critique for Scheme A from Judge 1"]
+    assert group["without_judge_reviews"] == ["Critique for Scheme B from Judge 1"]
