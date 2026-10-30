@@ -67,3 +67,43 @@
 - **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/36
 - **改动文件**：
 - .github/workflows/weekly-optimization.yml
+
+## 2026-10-30 03:51 迭代
+
+- **PR**：45 fix: use _compact_text in report_payload.py
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/45
+- **改动文件**：
+- evaluator/report_payload.py
+- tests/test_report_self_contained.py
+
+## 2026-10-30 03:51 迭代
+
+- **PR**：46 Retain constructor executor configuration in SkillEvaluator.run()
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/46
+- **改动文件**：
+- evaluator/sdk.py
+- tests/test_sdk.py
+
+## 2026-10-30 03:51 迭代
+
+- **PR**：47 Fix workflow host executor resolution when instantiated without executor
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/47
+- **改动文件**：
+- evaluator/workflow.py
+- tests/test_workflow_host_resolution.py
+
+## 2026-10-30 03:52 迭代
+
+- **PR**：48 Fix auto-merge-jules workflow security vulnerability
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/48
+- **改动文件**：
+- .github/workflows/auto-merge-jules.yml
+- tests/test_auto_merge_workflow.py
+
+## 2026-10-30 03:52 迭代
+
+- **PR**：49 Allocate atomically unique run directory for concurrent evaluations
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/49
+- **改动文件**：
+- evaluator/engine.py
+- tests/test_api_server.py
