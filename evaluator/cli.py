@@ -19,7 +19,9 @@ from .engine import (
     print_connectivity_report,
 )
 from .logger import configure_logging
+from .model_discovery import discover_models_for_host, discover_hosts
 from .models import EvaluationConfig, RunnerConfig, AnalysisConfig
+from .profile import EvalProfile, ProfileError, find_default_profile, load_profile
 from .paired_gain import DEFAULT_REPETITIONS
 from .preflight_validators import run_preflight_validators
 from .skill_analyzer import SkillAnalysis, SkillResource, analyze_skill
@@ -88,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="输出需要收集的字段信息（agent 用 question 展示）",
     )
     plan_parser.add_argument(
-        "--skill-path", required=True, help="测哪个 skill：skill 目录路径（必填）"
+        "--skill-path", default="", help="测哪个 skill：skill 目录路径（可用 --profile 提供）"
     )
     plan_parser.add_argument(
         "--skill-name", help="skill 名字（不填会自动从 SKILL.md 里读）"
@@ -214,7 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
         "pipeline", help="端到端评测（高级；4 个阶段停盘确认，新手请用 simple）"
     )
     pipeline_parser.add_argument(
-        "--skill-path", required=True, help="测哪个 skill：skill 目录路径"
+        "--skill-path", default="", help="测哪个 skill：skill 目录路径（可用 --profile 提供）"
     )
     pipeline_parser.add_argument(
         "--skill-name", help="skill 名字（不填会自动从 SKILL.md 里读）"
@@ -270,11 +272,70 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_parser.add_argument("--run-dir", help="包含快照文件的运行目录")
 
+    hosts_parser = subparsers.add_parser(
+        "hosts", help="列出所有 Agent 工具宿主的能力、注入约定与是否已安装"
+    )
+    hosts_parser.add_argument(
+        "--probe", action="store_true", help="逐个执行 --version 探活（默认也探活）"
+    )
+
+    # ---- 通用 profile / 非交互开关（A7，避免每个子命令重复定义） ----
+    for _parser in (
+        simple_parser,
+        plan_parser,
+        run_parser,
+        pipeline_parser,
+        eval_parser,
+        report_parser,
+        analyze_parser,
+    ):
+        _parser.add_argument(
+            "--profile",
+            "--config",
+            dest="profile",
+            default=None,
+            help="一次性评测配置文件（如 eval-config.json），所有入口复用",
+        )
+        _parser.add_argument(
+            "--non-interactive",
+            action="store_true",
+            help="非交互模式：缺参直接返回结构化 needs_user_input，绝不阻塞等输入",
+        )
+
+    def _add_if_missing(_parser, flag, **kwargs):
+        existing = {
+            option
+            for action in _parser._actions
+            for option in action.option_strings
+        }
+        if flag not in existing:
+            _parser.add_argument(flag, **kwargs)
+
+    for _parser in (simple_parser, pipeline_parser):
+        _add_if_missing(_parser, "--host", default=None, help="用哪个 Agent 工具跑实验")
+        _add_if_missing(_parser, "--host-config", default=None, help="宿主专属配置 (JSON)")
+        _add_if_missing(_parser, "--repetitions", type=int, default=None, help="每个实验重复几轮")
+        _add_if_missing(_parser, "--parallelism", type=int, default=None, help="同时跑几个实验")
+    for _parser in (simple_parser, pipeline_parser, plan_parser):
+        _add_if_missing(
+            _parser,
+            "--connectivity-timeout",
+            type=int,
+            default=60,
+            help="连通检查超时秒数",
+        )
+
+    for _parser in (run_parser, pipeline_parser, eval_parser):
+        _parser.add_argument("--force", action="store_true", help="强制重跑已完成的阶段/实验")
+        _parser.add_argument("--resume", action="store_true", help="续跑：跳过已完成阶段（默认行为）")
+
+    report_parser.add_argument("--force", action="store_true", help="强制重新生成报告")
+
     return parser
 
 
-def cmd_plan_init(skill_path: str) -> dict:
-    detected = get_opencode_models()
+def cmd_plan_init(skill_path: str, host: str | None = None) -> dict:
+    detected = discover_models_for_host(host)
 
     resources = []
     notes = []
@@ -725,6 +786,8 @@ class PlanGenerateConfig:
     repetitions: int | None = None
     host: str | None = None
     host_config: dict[str, Any] | None = None
+    connectivity_timeout: int = 60
+    non_interactive: bool = False
 
 
 def cmd_plan_generate(config: PlanGenerateConfig) -> dict:
@@ -747,15 +810,22 @@ def cmd_plan_generate(config: PlanGenerateConfig) -> dict:
     if not skill_path or not skill_path.strip():
         return {"error": "还没告诉我要测哪个 skill。请给我 skill 目录的路径。"}
     if not models:
-        return {"error": "models 不能为空"}
+        found = discover_models_for_host(config.host)
+        if not found:
+            return {
+                "error": "needs_user_input",
+                "action": "ask_user",
+                "message": "还没告诉我要用哪些模型测。本机也没发现可用模型，请指定 models。",
+                "missing_fields": ["models"],
+            }
+        models = found[:2]
+        print(f"ℹ️  未指定 models，默认使用发现的前 {len(models)} 个模型: {', '.join(models)}", file=sys.stderr)
     if not voting_models:
-        return {
-            "error": "voting_models 不能为空，盲评是必选流程，请至少提供一个评委模型"
-        }
+        voting_models = [models[0]]
+        print(f"ℹ️  未指定评委，默认使用第一个被测模型兼任: {voting_models[0]}", file=sys.stderr)
     if not summary_model:
-        return {
-            "error": "summary_model 不能为空，总结模型负责基于评委评价生成结构化洞察结论"
-        }
+        summary_model = voting_models[0]
+        print(f"ℹ️  未指定总结模型，默认使用第一个评委: {summary_model}", file=sys.stderr)
 
     resolved_skill_path = Path(skill_path)
     if not resolved_skill_path.is_absolute():
@@ -831,7 +901,11 @@ def cmd_plan_generate(config: PlanGenerateConfig) -> dict:
             f"\n🔗 开始模型连通性测试 ({len(all_test_models)} 个模型, mode={execution_mode}, host={host or '默认'})..."
         )
         connectivity = test_model_connectivity(
-            all_test_models, execution_mode=execution_mode, timeout=60, host=host
+            all_test_models,
+            execution_mode=execution_mode,
+            timeout=int(config.connectivity_timeout or 60),
+            host=host,
+            host_config=host_config,
         )
         print_connectivity_report(connectivity)
 
@@ -998,8 +1072,33 @@ def cmd_plan_generate(config: PlanGenerateConfig) -> dict:
     return result
 
 
-def _ask(prompt: str, default: str = "") -> str:
-    """提问并读取一行输入；直接回车返回默认值。"""
+class _NeedsInput(Exception):
+    """非交互模式下缺参：结构化上报，不阻塞 input()（B1）。"""
+
+    def __init__(self, fields: list[str], message: str = ""):
+        super().__init__(message or "需要用户补充输入")
+        self.fields = fields
+        self.message = message or "需要用户补充输入"
+
+
+_SIMPLE_QUESTIONS = {
+    "skill_path": ("1/4 测哪个 skill？给我 skill 目录的路径", ""),
+    "task_prompt": ("2/4 让它干什么活？一句话描述你想让这个 skill 完成的任务", ""),
+    "models": ("3/4 用哪些模型测？逗号分隔，比如 gpt-5,claude-4", ""),
+    "voting_models": ("4/4 请谁当评委？逗号分隔（回车用第一个被测模型兼任）", ""),
+}
+
+
+def _ask(
+    prompt: str,
+    default: str = "",
+    *,
+    field: str = "",
+    non_interactive: bool = False,
+) -> str:
+    """提问并读取一行输入；非交互模式直接抛 _NeedsInput（不调用 input()）。"""
+    if non_interactive:
+        raise _NeedsInput([field or prompt], f"非交互模式缺少必填项: {field or prompt}")
     suffix = f"（直接回车用默认：{default}）" if default else "（必答）"
     try:
         answer = input(f"{prompt}{suffix}: ").strip()
@@ -1008,103 +1107,179 @@ def _ask(prompt: str, default: str = "") -> str:
     return answer or default
 
 
-def cmd_simple(args: argparse.Namespace) -> dict:
-    """simple 引导模式：问答式收集 4 个必答项，自动串起 plan→run→evaluate→report。
+def _split_models(value: str) -> list[str]:
+    return [m.strip() for m in (value or "").split(",") if m.strip()]
 
-    4 个必答项：
-    1. 测哪个 skill（--skill-path）
-    2. 让它干什么活（--task-prompt）
-    3. 用哪些模型测（--models）
-    4. 请谁当评委（--voting-models）
-    其余参数全部用合理默认值。pipeline 保留给高级用户。
+
+def _simple_missing_payload(missing: list[str], non_interactive: bool) -> dict:
+    return {
+        "error": "needs_user_input",
+        "action": "ask_user",
+        "non_interactive": non_interactive,
+        "message": "还缺必填项，评测没法开始。补齐后重跑即可（可用 --profile 一次性给全）。",
+        "missing_fields": missing,
+        "questions": [
+            {"field": field, "question": _SIMPLE_QUESTIONS[field][0]}
+            for field in missing
+            if field in _SIMPLE_QUESTIONS
+        ],
+    }
+
+
+def cmd_simple(args: argparse.Namespace) -> dict:
+    """simple 引导模式：收集 4 个必答项，自动串起 plan→run→evaluate→report。
+
+    P4（B1）：无 TTY / --non-interactive 时绝不调用 input()，缺参直接返回结构化
+    needs_user_input + 非零退出码；--profile 可一次性给出全部答案。
     """
     from .workflow import SkillEvaluationWorkflow
+
+    profile = None
+    profile_path = getattr(args, "profile", None)
+    if profile_path:
+        try:
+            profile = load_profile(profile_path)
+        except ProfileError as exc:
+            return {"error": "profile_invalid", "message": str(exc)}
+    non_interactive = bool(
+        getattr(args, "non_interactive", False)
+        or getattr(args, "auto", False)
+        or getattr(args, "dry_run", False)
+        or not sys.stdin.isatty()
+    )
+
+    def pick(arg_value: str, profile_value: str) -> str:
+        return (arg_value or "").strip() or (profile_value or "").strip()
+
+    skill_path = pick(args.skill_path, profile.skill_path if profile else "")
+    task_prompt = pick(args.task_prompt, profile.task_prompt if profile else "")
+    models_answer = pick(args.models, ",".join(profile.models) if profile else "")
+    voting_answer = pick(args.voting_models, ",".join(profile.voting_models) if profile else "")
+    host = getattr(args, "host", None) or (profile.host if profile else None)
 
     print("\n" + "=" * 60)
     print("🎯 Skill 评测引导模式（simple）")
     print("只需要回答 4 个问题，其余全部用默认值，自动跑完评测。")
+    if non_interactive:
+        print("（非交互模式：缺参直接返回结构化结果，不会停下来等输入）")
     print("=" * 60)
 
-    skill_path = (args.skill_path or "").strip()
-    if not skill_path:
-        skill_path = _ask("\n1/4 测哪个 skill？给我 skill 目录的路径", "")
-    else:
-        print(f"\n1/4 测哪个 skill？已指定：{skill_path}")
-    if not skill_path:
-        return {
-            "error": "needs_user_input",
-            "message": "没拿到 skill 目录路径，评测没法开始。请重新运行并提供 skill 目录。",
-        }
+    missing: list[str] = []
+    prompts = dict(_SIMPLE_QUESTIONS)
+    if models_answer:
+        prompts["models"] = (prompts["models"][0], models_answer)
 
-    task_prompt = (args.task_prompt or "").strip()
-    if not task_prompt:
-        task_prompt = _ask(
-            "\n2/4 让它干什么活？一句话描述你想让这个 skill 完成的任务", ""
-        )
-    else:
-        print(f"\n2/4 让它干什么活？已指定：{task_prompt[:80]}")
-    if not task_prompt:
-        return {
-            "error": "needs_user_input",
-            "message": "没拿到任务描述。评测需要知道让 skill 干什么活。请重新运行并描述任务。",
-        }
+    answers = {
+        "skill_path": skill_path,
+        "task_prompt": task_prompt,
+        "models": models_answer,
+        "voting_models": voting_answer,
+    }
+    for field in ("skill_path", "task_prompt", "models", "voting_models"):
+        value = answers[field]
+        if value:
+            print(f"\n{prompts[field][0]} 已指定：{value[:120]}")
+            continue
+        if field == "models" and not non_interactive:
+            detected = discover_models_for_host(host)
+            default_models = ",".join(detected[:2]) if detected else ""
+        elif field == "voting_models" and answers["models"]:
+            default_models = answers["models"].split(",")[0].strip()
+        elif field == "voting_models" and profile:
+            default_models = profile.summary_model or ""
+        else:
+            default_models = prompts[field][1]
+        try:
+            answers[field] = _ask(
+                prompts[field][0],
+                default_models,
+                field=field,
+                non_interactive=non_interactive,
+            )
+        except _NeedsInput:
+            missing.append(field)
+            answers[field] = default_models
+        if not answers[field]:
+            missing.append(field)
 
-    models_answer = (args.models or "").strip()
-    detected = get_opencode_models()
-    default_models = ",".join(detected[:2]) if detected else ""
-    if not models_answer:
-        models_answer = _ask(
-            "\n3/4 用哪些模型测？逗号分隔，比如 gpt-5,claude-4", default_models
-        )
-    models = [m.strip() for m in models_answer.split(",") if m.strip()]
+    if missing:
+        return _simple_missing_payload(list(dict.fromkeys(missing)), non_interactive)
+
+    models = _split_models(answers["models"])
+    voting_models = _split_models(answers["voting_models"]) or [models[0]]
     if not models:
-        return {
-            "error": "needs_user_input",
-            "message": "没拿到要测的模型。请重新运行并至少指定一个模型。",
-        }
-    print(f"\n3/4 用哪些模型测？已选：{', '.join(models)}")
-
-    voting_answer = (args.voting_models or "").strip()
-    default_voting = models[0]
-    if not voting_answer:
-        voting_answer = _ask(
-            "\n4/4 请谁当评委？逗号分隔（回车用第一个被测模型兼任）", default_voting
-        )
-    voting_models = [m.strip() for m in voting_answer.split(",") if m.strip()]
-    if not voting_models:
-        voting_models = [models[0]]
-    print(f"\n4/4 请谁当评委？已选：{', '.join(voting_models)}")
+        return _simple_missing_payload(["models"], non_interactive)
 
     print("\n✅ 问题问完了。接下来会自动：生成计划 → 跑实验 → 评委打分 → 生成报告。")
-    if not args.auto and not args.dry_run:
+    if not non_interactive:
         try:
             input("   回车开始，输入 q 退出：")
         except (EOFError, KeyboardInterrupt):
             pass
 
     wf = SkillEvaluationWorkflow()
-    config = {
-        "skill_path": skill_path,
-        "skill_name": "",
-        "task_prompt": task_prompt,
-        "allow_generated_task_prompt": False,
-        "input_files": [],
-        "models": models,
-        "voting_models": voting_models,
-        "summary_model": voting_models[0],
-        "resources_json": None,
-        "execution_mode": "cli-attach",
-        "host": None,
-        "parallelism": None,
-        "dry_run": bool(args.dry_run),
-        "auto": bool(args.auto) or bool(args.dry_run),
-        "repetitions": None,
-    }
+    if profile is not None:
+        config = profile.to_workflow_config(
+            skill_path=answers["skill_path"],
+            task_prompt=answers["task_prompt"],
+            models=models,
+            voting_models=voting_models,
+            summary_model=profile.summary_model or voting_models[0],
+            host=host,
+            dry_run=bool(args.dry_run),
+            auto=bool(args.auto) or bool(args.dry_run) or non_interactive,
+            non_interactive=non_interactive,
+        )
+    else:
+        config = {
+            "skill_path": answers["skill_path"],
+            "skill_name": "",
+            "task_prompt": answers["task_prompt"],
+            "allow_generated_task_prompt": False,
+            "input_files": [],
+            "models": models,
+            "voting_models": voting_models,
+            "summary_model": voting_models[0],
+            "resources_json": None,
+            "execution_mode": "cli-attach",
+            "host": host,
+            "host_config": _parse_host_config(getattr(args, "host_config", None)),
+            "parallelism": getattr(args, "parallelism", None),
+            "dry_run": bool(args.dry_run),
+            "auto": bool(args.auto) or bool(args.dry_run) or non_interactive,
+            "non_interactive": non_interactive,
+            "repetitions": getattr(args, "repetitions", None),
+        }
     result = wf.run(config)
     if result.get("success"):
         print(f"\n🎉 评测完成！报告在这里：{result.get('report_path', '')}")
-        print("   用浏览器打开就能看：第一屏有总结和带/不带 skill 的实际产出对照。")
+        print("   用浏览器打开就能看：第一屏有总结和带/不带 skill 的实际产出对比。")
     return result
+
+
+def _load_cli_profile(args: argparse.Namespace) -> EvalProfile | None:
+    path = getattr(args, "profile", None)
+    if not path:
+        return None
+    return load_profile(path)
+
+
+def _profile_error_payload(exc: Exception) -> dict:
+    return {"error": "profile_invalid", "message": str(exc)}
+
+
+def _main_exit_code(result: Any) -> int:
+    """A7/B1：缺参给非零退出码，成功/主动中止给 0。"""
+    if not isinstance(result, dict):
+        return 0
+    if result.get("aborted"):
+        return 0
+    error = str(result.get("error") or "")
+    if not error and result.get("success") is not False:
+        return 0
+    if error in ("needs_user_input", "select_voting_models", "no_models_found"):
+        return 2
+    return 1
 
 
 def main() -> None:
@@ -1133,45 +1308,76 @@ def main() -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 
-    if args.command == "simple":
-        result = cmd_simple(args)
+    if args.command == "hosts":
+        result = {"hosts": discover_hosts()}
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 
+    try:
+        profile = _load_cli_profile(args)
+    except ProfileError as exc:
+        result = _profile_error_payload(exc)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(2)
+
+    if args.command == "simple":
+        result = cmd_simple(args)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(_main_exit_code(result))
+
     if args.command == "plan":
         if args.init:
-            skill_path = args.skill_path or ""
-            result = cmd_plan_init(skill_path)
+            skill_path = args.skill_path or (profile.skill_path if profile else "")
+            result = cmd_plan_init(skill_path, getattr(args, "host", None))
         elif args.generate:
             input_files = []
             if args.input_files:
                 input_files = [
                     f.strip() for f in args.input_files.split(",") if f.strip()
                 ]
-            models = []
-            if args.models:
-                models = [m.strip() for m in args.models.split(",") if m.strip()]
-            voting_models = []
-            if args.voting_models:
-                voting_models = [
-                    m.strip() for m in args.voting_models.split(",") if m.strip()
-                ]
+            models = _split_models(args.models or "")
+            voting_models = _split_models(args.voting_models or "")
+            summary_model = args.summary_model
+            skill_path = args.skill_path or ""
+            task_prompt = args.task_prompt or ""
+            resources_json = args.resources
+            host = getattr(args, "host", None)
+            host_config = _parse_host_config(getattr(args, "host_config", None))
+            allow_generated = args.allow_generated_task_prompt
+            repetitions = getattr(args, "repetitions", None)
+            parallelism = args.parallelism
+            if profile is not None:
+                skill_path = skill_path or profile.skill_path
+                task_prompt = task_prompt or profile.task_prompt
+                models = models or list(profile.models)
+                voting_models = voting_models or list(profile.voting_models)
+                summary_model = summary_model or (profile.summary_model or None)
+                resources_json = resources_json or profile.resources_json()
+                host = host or (profile.host or None)
+                host_config = host_config or (dict(profile.host_config) or None)
+                allow_generated = allow_generated or profile.allow_generated_task_prompt
+                repetitions = repetitions if repetitions is not None else profile.repetitions
+                parallelism = parallelism if parallelism is not None else profile.parallelism
+                if not input_files:
+                    input_files = list(profile.input_files)
             config = PlanGenerateConfig(
-                skill_name=args.skill_name or "",
-                skill_path=args.skill_path or "",
-                task_prompt=args.task_prompt or "",
+                skill_name=args.skill_name or (profile.skill_name if profile else ""),
+                skill_path=skill_path,
+                task_prompt=task_prompt,
                 input_files=input_files,
                 models=models,
                 voting_models=voting_models,
-                summary_model=args.summary_model,
-                resources_json=args.resources,
-                parallelism=args.parallelism,
+                summary_model=summary_model,
+                resources_json=resources_json,
+                parallelism=parallelism,
                 execution_mode=args.execution_mode,
                 skip_connectivity_test=args.skip_connectivity_test,
-                allow_generated_task_prompt=args.allow_generated_task_prompt,
-                repetitions=getattr(args, "repetitions", None),
-                host=getattr(args, "host", None),
-                host_config=_parse_host_config(getattr(args, "host_config", None)),
+                allow_generated_task_prompt=allow_generated,
+                repetitions=repetitions,
+                host=host,
+                host_config=host_config,
+                connectivity_timeout=getattr(args, "connectivity_timeout", 60),
+                non_interactive=getattr(args, "non_interactive", False),
             )
             result = cmd_plan_generate(config)
         else:
@@ -1212,6 +1418,8 @@ def main() -> None:
                         parallelism=args.parallelism,
                         review_parallelism=args.review_parallelism,
                         progress_interval=args.progress_interval,
+                        force=bool(getattr(args, "force", False)),
+                        resume=bool(getattr(args, "resume", False)),
                     )
                 )
             }
@@ -1220,48 +1428,54 @@ def main() -> None:
         result = analyze_existing_run(Path(args.run_dir).resolve())
 
     elif args.command == "report":
-        result = generate_existing_run_report(Path(args.run_dir).resolve())
+        result = generate_existing_run_report(
+            Path(args.run_dir).resolve(), force=bool(getattr(args, "force", False))
+        )
 
     elif args.command == "evaluate":
         run_dir = Path(args.run_dir).resolve()
-        detected_models = get_opencode_models()
-        if not detected_models:
-            manifest_path = run_dir / "run_manifest.json"
-            if manifest_path.exists():
-                manifest = json.loads(manifest_path.read_text())
-                for r in manifest.get("results", []):
-                    model = r.get("model", "")
-                    if model and model not in detected_models:
-                        detected_models.append(model)
+        manifest_models: list[str] = []
+        manifest_path = run_dir / "run_manifest.json"
+        if manifest_path.exists():
+            manifest = json.loads(manifest_path.read_text())
+            for r in manifest.get("results", []):
+                model = r.get("model", "")
+                if model and model not in manifest_models:
+                    manifest_models.append(model)
+        detected_models = discover_models_for_host(profile.host if profile else None)
+        for model in manifest_models:
+            if model not in detected_models:
+                detected_models.append(model)
 
-        if not detected_models:
-            print("❌ 联系不上任何模型。请确认 opencode 已安装并能用。")
-            result = {"error": "no_models_found"}
-        elif args.voting_models:
-            voting_models = [
-                m.strip() for m in args.voting_models.split(",") if m.strip()
-            ]
-            if not voting_models:
-                result = {"error": "还没告诉我要请哪些评委。请指定至少一个打分模型。"}
-            else:
-                print(f"\n✅ 已选择 {len(voting_models)} 个评审模型:")
-                for m in voting_models:
-                    print(f"   - {m}")
-                from .engine import run_blind_vote_phase
-
-                result = run_blind_vote_phase(
-                    run_dir,
-                    voting_models=voting_models,
-                    parallelism=args.review_parallelism,
+        voting_models = _split_models(args.voting_models or "")
+        if not voting_models:
+            # B2/C4：缺 --voting-models 不再交互死锁，默认第一个被测模型兼任评委。
+            voting_models = manifest_models[:1]
+            if voting_models:
+                print(
+                    f"ℹ️  未指定评委，默认使用第一个被测模型兼任: {voting_models[0]}",
+                    file=sys.stderr,
                 )
-        else:
-            # P3: 旧交互分支签名错配已移除（弃用清单）；盲评为必选流程，
-            # 请显式传入 --voting-models（逗号分隔），或使用 pipeline 端到端流程。
+        if not voting_models:
             result = {
                 "action": "select_voting_models",
+                "error": "needs_user_input",
                 "available_models": detected_models,
                 "message": "评委打分是必选流程。请用 --voting-models 指定评委模型（逗号分隔）后重试。",
             }
+        else:
+            print(f"\n✅ 已选择 {len(voting_models)} 个评审模型:")
+            for m in voting_models:
+                print(f"   - {m}")
+            from .engine import run_blind_vote_phase
+
+            result = run_blind_vote_phase(
+                run_dir,
+                voting_models=voting_models,
+                parallelism=args.review_parallelism,
+                host=profile.host if profile else None,
+                force=bool(getattr(args, "force", False)),
+            )
 
     elif args.command == "pipeline":
         from .workflow import SkillEvaluationWorkflow
@@ -1271,40 +1485,83 @@ def main() -> None:
             if args.input_files
             else []
         )
-        models = (
-            [m.strip() for m in args.models.split(",") if m.strip()]
-            if args.models
-            else []
-        )
-        voting_models = (
-            [m.strip() for m in args.voting_models.split(",") if m.strip()]
-            if args.voting_models
-            else []
-        )
-        detected_models = get_opencode_models()
+        models = _split_models(args.models or "")
+        voting_models = _split_models(args.voting_models or "")
+        summary_model = args.summary_model
+        skill_path = args.skill_path
+        task_prompt = args.task_prompt or ""
+        resources_json = args.resources
+        host = getattr(args, "host", None)
+        host_config = _parse_host_config(getattr(args, "host_config", None))
+        allow_generated = args.allow_generated_task_prompt
+        repetitions = getattr(args, "repetitions", None)
+        parallelism = args.parallelism
+        execution_mode = args.execution_mode
+        if profile is not None:
+            skill_path = skill_path or profile.skill_path
+            task_prompt = task_prompt or profile.task_prompt
+            models = models or list(profile.models)
+            voting_models = voting_models or list(profile.voting_models)
+            summary_model = summary_model or (profile.summary_model or None)
+            resources_json = resources_json or profile.resources_json()
+            host = host or (profile.host or None)
+            host_config = host_config or (dict(profile.host_config) or None)
+            allow_generated = allow_generated or profile.allow_generated_task_prompt
+            repetitions = repetitions if repetitions is not None else profile.repetitions
+            parallelism = parallelism if parallelism is not None else profile.parallelism
+            execution_mode = profile.execution_mode or execution_mode
+            if not input_files:
+                input_files = list(profile.input_files)
+            if not args.auto:
+                args.auto = profile.auto
+            if not args.dry_run:
+                args.dry_run = profile.dry_run
+        if not skill_path:
+            result = {
+                "error": "needs_user_input",
+                "action": "ask_user",
+                "message": "还没告诉我要测哪个 skill。请提供 --skill-path 或 --profile。",
+                "missing_fields": ["skill_path"],
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            sys.exit(2)
         if not models:
-            models = detected_models[:2] if detected_models else ["default-model"]
+            models = discover_models_for_host(host)[:2]
+        if not models:
+            result = {
+                "error": "needs_user_input",
+                "action": "ask_user",
+                "message": "没发现可用模型，请用 --models 指定。",
+                "missing_fields": ["models"],
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            sys.exit(2)
         if not voting_models:
             voting_models = [models[0]]
-        summary_model = args.summary_model or voting_models[0]
+        summary_model = summary_model or voting_models[0]
         wf = SkillEvaluationWorkflow()
         config = {
-            "skill_path": args.skill_path,
-            "skill_name": args.skill_name or "",
-            "task_prompt": args.task_prompt or "",
-            "allow_generated_task_prompt": args.allow_generated_task_prompt,
+            "skill_path": skill_path,
+            "skill_name": args.skill_name or (profile.skill_name if profile else ""),
+            "task_prompt": task_prompt,
+            "allow_generated_task_prompt": allow_generated,
             "input_files": input_files,
             "models": models,
             "voting_models": voting_models,
             "summary_model": summary_model,
-            "resources_json": args.resources,
-            "execution_mode": args.execution_mode,
-            "host": getattr(args, "host", None),
-            "host_config": _parse_host_config(getattr(args, "host_config", None)),
-            "parallelism": args.parallelism,
+            "resources_json": resources_json,
+            "execution_mode": execution_mode,
+            "host": host,
+            "host_config": host_config,
+            "parallelism": parallelism,
             "dry_run": args.dry_run,
-            "auto": args.auto,
-            "repetitions": getattr(args, "repetitions", None),
+            "auto": args.auto or not sys.stdin.isatty(),
+            "non_interactive": bool(getattr(args, "non_interactive", False)),
+            "repetitions": repetitions,
+            "skip_connectivity_test": getattr(args, "skip_connectivity_test", False),
+            "connectivity_timeout": getattr(args, "connectivity_timeout", 60),
+            "force": bool(getattr(args, "force", False)),
+            "resume": bool(getattr(args, "resume", False)),
         }
         result = wf.run(config)
 
@@ -1332,7 +1589,11 @@ def main() -> None:
         else:
             result = verify_assertions_snapshot_file(target_path)
 
+    else:
+        result = {"error": f"未知子命令: {args.command}"}
+
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    sys.exit(_main_exit_code(result))
 
 
 if __name__ == "__main__":
