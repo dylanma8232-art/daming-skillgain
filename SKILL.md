@@ -5,7 +5,7 @@ license: GPL-3.0
 metadata:
   audience: developers
   workflow: evaluation
-  version: "1.0"
+  version: "2.0.0"
   main_metric: Skill Gain Δ (paired, same-model)
   compatibility: 跨宿主（经 Subject Adapter 统一契约；报告标注本次已测宿主，结论仅适用于已测宿主）
 ---
