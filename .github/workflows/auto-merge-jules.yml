@@ -22,8 +22,36 @@ jobs:
         env:
           BODY: ${{ github.event.pull_request.body }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          TARGET_REPO: ${{ github.repository }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          REPO_OWNER: ${{ github.repository_owner }}
         run: |
+          # 1. Fork and Repo Check: Head repo must match target repo and must not be a fork
+          IS_SAME_REPO=false
+          if [ "$IS_FORK" = "false" ] && [ "$HEAD_REPO" = "$TARGET_REPO" ]; then
+            IS_SAME_REPO=true
+          fi
+
+          # 2. Author Check: PR user must be repository owner or a recognized Jules bot account
+          PR_USER_LOWER=$(printf '%s' "$PR_USER" | tr '[:upper:]' '[:lower:]')
+          REPO_OWNER_LOWER=$(printf '%s' "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')
+
+          IS_TRUSTED_USER=false
+          if [ "$PR_USER_LOWER" = "$REPO_OWNER_LOWER" ]; then
+            IS_TRUSTED_USER=true
+          elif [ "$PR_USER_LOWER" = "google-jules-app[bot]" ] || [ "$PR_USER_LOWER" = "jules[bot]" ] || [ "$PR_USER_LOWER" = "github-actions[bot]" ]; then
+            IS_TRUSTED_USER=true
+          fi
+
+          # 3. Content Check: Body or Branch matching Jules pattern
+          IS_JULES_PATTERN=false
           if printf '%s' "$BODY" | grep -q "PR created automatically by Jules" || printf '%s' "$BRANCH" | grep -Eq '[0-9]{15}'; then
+            IS_JULES_PATTERN=true
+          fi
+
+          if [ "$IS_SAME_REPO" = "true" ] && [ "$IS_TRUSTED_USER" = "true" ] && [ "$IS_JULES_PATTERN" = "true" ]; then
             echo "is_jules=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_jules=false" >> "$GITHUB_OUTPUT"
