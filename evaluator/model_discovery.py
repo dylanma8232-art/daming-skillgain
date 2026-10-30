@@ -401,3 +401,50 @@ def interactive_setup() -> dict[str, Any]:
                 "selected_model": default_models[provider][0],
                 "available_models": default_models[provider]
             }
+
+
+# ==========================================================================
+# 按宿主分发的模型发现（改造项 A8/B4/C5）
+# 消除「模型发现只认 opencode」的硬卡点：任何宿主都经统一调度层分发到各自的
+# list_models()，宿主未安装 / 发现失败时回退到 config.available_models，绝不静默降级。
+# ==========================================================================
+
+def discover_models_for_host(
+    host: str | None = None,
+    execution_mode: str = "cli-attach",
+    host_config: dict[str, Any] | None = None,
+) -> list[str]:
+    """按宿主发现可用模型（统一入口，主链不得直接 import 宿主专用发现函数）。"""
+    from .host_session import resolve_host
+
+    try:
+        executor = resolve_host(host, execution_mode, host_config)
+    except Exception:
+        return []
+    try:
+        models = executor.list_models()
+    except Exception:
+        return []
+    return [str(m) for m in (models or []) if str(m).strip()]
+
+
+def discover_hosts() -> dict[str, Any]:
+    """列出所有已注册宿主的 capabilities / CLI 是否安装（hosts 子命令用）。"""
+    from .executors import HOST_REGISTRY
+
+    report: dict[str, Any] = {}
+    seen: set[str] = set()
+    for name, cls in sorted(HOST_REGISTRY.items()):
+        if cls.host_name in seen and name != cls.host_name:
+            # 别名只登记指向，不重复探活
+            report[name] = {"alias_of": cls.host_name}
+            continue
+        seen.add(cls.host_name)
+        executor = cls({})
+        entry: dict[str, Any] = {"capabilities": dict(executor.capabilities)}
+        probe = executor.probe() if executor.cli_command() else None
+        entry["installed"] = bool(probe.ok) if probe is not None else None
+        entry["version"] = getattr(probe, "version", "") if probe else ""
+        entry["probe_error"] = getattr(probe, "message", "") if probe else ""
+        report[name] = entry
+    return report
