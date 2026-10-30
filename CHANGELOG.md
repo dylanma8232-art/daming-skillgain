@@ -75,3 +75,11 @@
 - **改动文件**：
 - evaluator/report_payload.py
 - tests/test_report_self_contained.py
+
+## 2026-10-30 03:51 迭代
+
+- **PR**：46 Retain constructor executor configuration in SkillEvaluator.run()
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/46
+- **改动文件**：
+- evaluator/sdk.py
+- tests/test_sdk.py
