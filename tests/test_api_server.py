@@ -1,4 +1,5 @@
 import os
+from unittest.mock import MagicMock
 import pytest
 
 try:
@@ -53,10 +54,12 @@ def test_authenticated_health_check(monkeypatch):
     assert resp2.json() == {"status": "ok"}
 
 
-def test_evaluate_endpoint_exception(mocker, monkeypatch):
+def test_evaluate_endpoint_exception(monkeypatch):
     """测试带 Auth 头信息的 evaluate 异常处理"""
     monkeypatch.setenv("EVALUATOR_API_KEY", TEST_API_KEY)
-    mocker.patch('evaluator.sdk.SkillEvaluator.run', side_effect=Exception("Test Error"))
+
+    from evaluator.sdk import SkillEvaluator
+    monkeypatch.setattr(SkillEvaluator, "run", MagicMock(side_effect=Exception("Test Error")))
 
     response = client.post(
         "/api/evaluate",
@@ -111,14 +114,17 @@ def test_concurrent_create_run_directory_atomic_uniqueness(tmp_path):
         assert (run_dir / "experiments").exists()
 
 
-def test_evaluate_uses_server_env_not_request_body(mocker, monkeypatch):
+def test_evaluate_uses_server_env_not_request_body(monkeypatch):
     """验证 evaluate 不再从请求体中接收 skill_path / executor_type / executor_config"""
     monkeypatch.setenv("EVALUATOR_API_KEY", TEST_API_KEY)
     monkeypatch.setenv("EVALUATOR_SKILL_PATH", "/server/safe/path")
     monkeypatch.setenv("EVALUATOR_EXECUTOR_TYPE", "claude-code")
 
-    mock_init = mocker.patch('evaluator.sdk.SkillEvaluator.__init__', return_value=None)
-    mock_run = mocker.patch('evaluator.sdk.SkillEvaluator.run', return_value={"status": "completed"})
+    from evaluator.sdk import SkillEvaluator
+    mock_init = MagicMock(return_value=None)
+    mock_run = MagicMock(return_value={"status": "completed"})
+    monkeypatch.setattr(SkillEvaluator, "__init__", mock_init)
+    monkeypatch.setattr(SkillEvaluator, "run", mock_run)
 
     response = client.post(
         "/api/evaluate",
