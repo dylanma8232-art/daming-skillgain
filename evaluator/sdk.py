@@ -1,144 +1,155 @@
-"""Python SDK - 简单易用的 Python 接口"""
+"""Python SDK - 简单易用的 Python 接口
+
+A10：支持 `SkillEvaluator(profile=...)`；`run()` 透传 host / host_config / repetitions；
+自动检测改为「按宿主分发模型发现」，不再硬依赖 ModelDiscovery（发现失败不阻断 profile 路径）。
+"""
 from __future__ import annotations
 from typing import Any
 
+from .profile import EvalProfile, load_profile
 from .workflow import SkillEvaluationWorkflow
 from .executors import create_executor
-from .model_discovery import ModelDiscovery
 
 
 class SkillEvaluator:
     """Skill 评测器 Python SDK"""
-    
+
     def __init__(
         self,
         skill_path: str = None,
         executor_type: str = None,
         executor_config: dict = None,
         auto_discover: bool = True,
+        profile: EvalProfile | str | None = None,
         **kwargs
     ):
         """初始化评测器
-        
+
         Args:
             skill_path: 被评测 skill 目录路径
-            executor_type: 执行器类型 (opencode / api) - 如果不指定则自动检测
+            executor_type: 执行器类型 (opencode / claude-code / codex / cursor-agent / api ...)
             executor_config: 执行器配置
-            auto_discover: 是否自动检测本地工具
+            auto_discover: 是否自动检测本地工具（profile 路径下默认不做硬依赖检测）
+            profile: EvalProfile 实例或 profile JSON 路径（一次性配置，可复用）
             **kwargs: 其他配置
         """
-        self.skill_path = skill_path
-        
-        # 自动检测
-        if auto_discover and not executor_type and not executor_config:
-            discovery = ModelDiscovery()
-            result = discovery.discover()
-            recommendation = discovery.get_recommendation(result)
-            
-            if recommendation["executor_type"]:
-                executor_type = recommendation["executor_type"]
-                executor_config = recommendation["executor_config"]
-                self._available_models = recommendation["models"]
-            else:
-                # 需要手动配置
-                raise ValueError(
-                    "未检测到本地工具或 API key，请手动配置：\n"
-                    "  evaluator = SkillEvaluator(\n"
-                    "      skill_path='./my-skill',\n"
-                    "      executor_type='api',\n"
-                    "      executor_config={'provider': 'openai', 'api_key': 'sk-xxx'}\n"
-                    "  )"
-                )
-        
-        # 创建执行器
-        if executor_config:
-            # 确保 executor_config 中有 type 字段
-            if "type" not in executor_config and executor_type:
-                executor_config["type"] = executor_type
-            self.executor = create_executor(executor_config)
-        elif executor_type:
-            self.executor = create_executor({"type": executor_type, **kwargs})
+        if isinstance(profile, str):
+            profile = load_profile(profile)
+        self.profile: EvalProfile | None = profile
+        self.skill_path = skill_path or (profile.skill_path if profile else None)
+
+        host = executor_type or (profile.host if profile and profile.host else None)
+        host_config: dict[str, Any] = dict(executor_config or {})
+        if profile and profile.host_config:
+            host_config = {**profile.host_config, **host_config}
+        if host:
+            host_config.setdefault("type", host)
+
+        if host or host_config:
+            self.executor = create_executor(host_config or {"type": host})
+        elif auto_discover:
+            # 按宿主分发模型发现；失败不阻断（返回空即可，后续显式选择宿主）。
+            from .model_discovery import discover_models_for_host
+
+            self._available_models = discover_models_for_host(None)
+            self.executor = create_executor({"type": "opencode"})
         else:
             self.executor = create_executor({"type": "opencode"})
-        
-        # 创建工作流
+
         self.workflow = SkillEvaluationWorkflow(executor=self.executor)
-    
+
     def run(
         self,
-        task_prompt: str,
-        models: list[str],
+        task_prompt: str = None,
+        models: list[str] = None,
         voting_models: list[str] = None,
         summary_model: str = None,
         **kwargs
     ) -> dict[str, Any]:
         """执行评测
-        
+
         Args:
-            task_prompt: 评测任务描述
-            models: 参与评测的模型列表
-            voting_models: 评委模型列表（默认使用第一个模型）
-            summary_model: 总结模型（默认使用第一个模型）
-            **kwargs: 其他参数
-            
-        Returns:
-            dict: 评测结果
+            task_prompt: 评测任务描述（缺省取 profile.task_prompt）
+            models: 参与评测的模型列表（缺省取 profile.models）
+            voting_models: 评委模型列表（缺省取 profile.voting_models 或第一个模型）
+            summary_model: 总结模型（缺省取 profile.summary_model 或第一个评委）
+            **kwargs: 其他参数（host / host_config / repetitions 等透传）
         """
+        profile = self.profile
+        if profile is not None:
+            config = profile.to_workflow_config(auto=True, non_interactive=True)
+        else:
+            config = {
+                "skill_path": self.skill_path,
+                "skill_name": "",
+                "task_prompt": "",
+                "allow_generated_task_prompt": False,
+                "input_files": [],
+                "models": [],
+                "voting_models": [],
+                "summary_model": "",
+                "resources_json": None,
+                "execution_mode": "cli-attach",
+                "host": None,
+                "host_config": None,
+                "auto": True,
+                "non_interactive": True,
+            }
+
         if not self.skill_path:
             raise ValueError("未指定 skill_path")
-        
+        config["skill_path"] = self.skill_path
+
+        models = list(models or config.get("models") or [])
+        if profile is None and not models:
+            from .model_discovery import discover_models_for_host
+
+            models = discover_models_for_host(config.get("host"))[:2]
+        if not models:
+            raise ValueError("未指定 models，且本机未发现可用模型")
+
+        voting_models = list(voting_models or config.get("voting_models") or [])
         if not voting_models:
             voting_models = [models[0]]
-        
-        if not summary_model:
-            summary_model = models[0]
-        
-        config = {
-            "skill_path": self.skill_path,
-            "task_prompt": task_prompt,
-            "models": models,
-            "voting_models": voting_models,
-            "summary_model": summary_model,
-            **kwargs
-        }
-        
+        summary_model = summary_model or config.get("summary_model") or voting_models[0]
+
+        config.update(
+            {
+                "task_prompt": task_prompt if task_prompt is not None else config.get("task_prompt", ""),
+                "models": models,
+                "voting_models": voting_models,
+                "summary_model": summary_model,
+            }
+        )
+        config.update(kwargs)
+        config.setdefault("auto", True)
+        config.setdefault("non_interactive", True)
+        if config.get("host") is None and profile is not None:
+            config["host"] = profile.host or None
+        if not config.get("host_config") and profile is not None:
+            config["host_config"] = dict(profile.host_config) or None
+        if config.get("repetitions") is None and profile is not None:
+            config["repetitions"] = profile.repetitions
+
         return self.workflow.run(config)
-    
+
     def analyze_skill(self, skill_path: str = None) -> dict[str, Any]:
-        """分析 skill
-        
-        Args:
-            skill_path: skill 目录路径（默认使用初始化时的路径）
-            
-        Returns:
-            dict: skill 分析结果
-        """
+        """分析 skill"""
         from .skill_analyzer import analyze_skill
-        
+
         path = skill_path or self.skill_path
         if not path:
             raise ValueError("未指定 skill_path")
-        
+
         analysis = analyze_skill(path)
         return analysis.to_dict()
-    
+
     def check_connectivity(self, model: str) -> bool:
-        """检查模型连通性
-        
-        Args:
-            model: 模型名称
-            
-        Returns:
-            bool: 是否可连通
-        """
+        """检查模型连通性"""
         return self.executor.check_connectivity(model)
-    
+
     def list_models(self) -> list[str]:
-        """列出可用模型
-        
-        Returns:
-            list[str]: 可用模型列表
-        """
+        """列出可用模型"""
         return self.executor.list_models()
 
 
@@ -150,28 +161,17 @@ def evaluate_skill(
     voting_models: list[str] = None,
     summary_model: str = None,
     executor_type: str = "opencode",
+    profile: EvalProfile | str | None = None,
     **kwargs
 ) -> dict[str, Any]:
-    """快捷评测函数
-    
-    Args:
-        skill_path: 被评测 skill 目录路径
-        task_prompt: 评测任务描述
-        models: 参与评测的模型列表
-        voting_models: 评委模型列表
-        summary_model: 总结模型
-        executor_type: 执行器类型
-        **kwargs: 其他参数
-        
-    Returns:
-        dict: 评测结果
-    """
+    """快捷评测函数"""
     evaluator = SkillEvaluator(
         skill_path=skill_path,
-        executor_type=executor_type,
+        executor_type=None if profile is not None else executor_type,
+        profile=profile,
         **kwargs
     )
-    
+
     return evaluator.run(
         task_prompt=task_prompt,
         models=models,
