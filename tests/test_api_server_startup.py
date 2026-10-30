@@ -24,6 +24,27 @@ def test_run_server_success(monkeypatch):
     finally:
         api_server.HAS_FASTAPI = original_has_fastapi
 
+def test_run_server_default_host(monkeypatch):
+    """测试 run_server 默认监听在 127.0.0.1:8000"""
+    mock_uvicorn_run = MagicMock()
+    try:
+        import uvicorn
+        monkeypatch.setattr(uvicorn, "run", mock_uvicorn_run)
+    except ImportError:
+        import sys
+        mock_uvicorn = MagicMock()
+        mock_uvicorn.run = mock_uvicorn_run
+        monkeypatch.setitem(sys.modules, "uvicorn", mock_uvicorn)
+
+    original_has_fastapi = api_server.HAS_FASTAPI
+    api_server.HAS_FASTAPI = True
+
+    try:
+        run_server()
+        mock_uvicorn_run.assert_called_once_with(app, host="127.0.0.1", port=8000)
+    finally:
+        api_server.HAS_FASTAPI = original_has_fastapi
+
 def test_run_server_missing_fastapi():
     """测试在未安装依赖时抛出错误"""
     original_has_fastapi = api_server.HAS_FASTAPI
