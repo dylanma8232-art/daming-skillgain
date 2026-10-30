@@ -4,6 +4,26 @@
 
 ---
 
+## [2026-10-30] v2.0.0 通用桌面 Agent 适配与极简报告重构里程碑
+
+- **版本**：v2.0.0（通用 Agent 适配、流程强化与大白话报告全闭环）
+- **Release 链接**：https://github.com/dylanma8232-art/daming-skillgain/releases/tag/v2.0.0
+- **三大核心改版成果**：
+  1. **通用 Agent 深度适配（Codex / Claude Code / Cursor Agent）**：
+     - 新增通用 `HostProtocol` 标准抽象基座（探活、非交互传参、stream-json 解析、错误分类）；
+     - 深度重构 `codex.py`（支持 `--json` 事件流、`--cd` 工作区隔离、thread_id 追踪）；
+     - 深度重构 `claude_code.py`（prompt 走 stdin、`--add-dir`、`--resume`、会话恢复）；
+     - 新增 `cursor-agent` 第六宿主适配器，支持无头非交互模式一键唤起。
+  2. **四步流水线强化与零卡点一键闭环**：
+     - 新增 `evaluator/profile.py` 配置文件机制（`--profile` / `--config`），实现免交互静默一键跑通；
+     - 缺参返回结构化 `needs_user_input` 状态码 2，彻底消灭管道环境下 `input()` 卡死；
+     - 失败细化为 retryable / fatal 两类，支持中断后 `--resume` 断点续跑与 `--force` 重新渲染。
+  3. **大白话极简自包含报告（单 HTML）**：
+     - 报告重构为三层解耦（Payload / Template / Renderer），零外链网络依赖（CSS/JS 全内联）；
+     - 首屏四件套直击要害：【大字裁决（推荐发布/暂缓/负迁移）+ 核心三指标 + 红绿用例清单 + 有/无对照卡片】；
+     - 彻底去除学术统计学术语，用通俗直白语言呈现用例成败原因与对比证据。
+- **质量门禁**：全量单元测试 106 passed / 1 skipped（新增 39 例针对宿主与报告的自动化断言，通过率 100%）。
+
 ## [2026-10-28] 全局代码健康治理与性能优化重构
 - **类型**: `refactor` / `perf` / `fix`
 - **治理目标**: 一次性统揽解决 Jules 提出的 17 项代码异味、性能瓶颈与潜在异常风险
