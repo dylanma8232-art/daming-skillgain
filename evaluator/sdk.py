@@ -45,6 +45,9 @@ class SkillEvaluator:
         if host:
             host_config.setdefault("type", host)
 
+        self.host = host
+        self.host_config = host_config
+
         if host or host_config:
             self.executor = create_executor(host_config or {"type": host})
         elif auto_discover:
@@ -90,8 +93,8 @@ class SkillEvaluator:
                 "summary_model": "",
                 "resources_json": None,
                 "execution_mode": "cli-attach",
-                "host": None,
-                "host_config": None,
+                "host": self.host,
+                "host_config": dict(self.host_config) if self.host_config else None,
                 "auto": True,
                 "non_interactive": True,
             }
@@ -124,10 +127,16 @@ class SkillEvaluator:
         config.update(kwargs)
         config.setdefault("auto", True)
         config.setdefault("non_interactive", True)
-        if config.get("host") is None and profile is not None:
+        if "host" not in kwargs and self.host is not None:
+            config["host"] = self.host
+        elif config.get("host") is None and profile is not None:
             config["host"] = profile.host or None
-        if not config.get("host_config") and profile is not None:
+
+        if "host_config" not in kwargs and self.host_config:
+            config["host_config"] = dict(self.host_config)
+        elif not config.get("host_config") and profile is not None:
             config["host_config"] = dict(profile.host_config) or None
+
         if config.get("repetitions") is None and profile is not None:
             config["repetitions"] = profile.repetitions
 
