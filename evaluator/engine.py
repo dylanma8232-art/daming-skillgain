@@ -824,8 +824,18 @@ class EvaluationEngine:
 
     def create_run_directory(self) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        run_dir = self.workspace_root / f"{timestamp}-{self.config.evaluation_name}"
-        ensure_directory(run_dir)
+        base_name = f"{timestamp}-{self.config.evaluation_name}"
+        ensure_directory(self.workspace_root)
+        counter = 0
+        while True:
+            dir_name = base_name if counter == 0 else f"{base_name}-{counter}"
+            run_dir = self.workspace_root / dir_name
+            try:
+                run_dir.mkdir(parents=True, exist_ok=False)
+                break
+            except FileExistsError:
+                counter += 1
+
         ensure_directory(run_dir / "experiments")
         LOGGER.info("创建评测运行目录: run_dir=%s", run_dir)
         return run_dir
