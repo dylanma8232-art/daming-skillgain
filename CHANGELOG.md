@@ -118,3 +118,14 @@
 - requirements.txt
 - tests/test_api_server.py
 - tests/test_api_server_startup.py
+
+## 2026-10-30 06:23 迭代
+
+- **PR**：50 Fix API server security: bind 127.0.0.1, enforce auth, drop unsafe parameters
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/50
+- **改动文件**：
+- .github/workflows/auto-merge-jules.yml
+- evaluator/api_server.py
+- requirements.txt
+- tests/test_api_server.py
+- tests/test_api_server_startup.py
