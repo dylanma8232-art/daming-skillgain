@@ -9,6 +9,7 @@ from .standalone import StandaloneExecutor
 from .agent import AgentExecutor
 from .claude_code import ClaudeCodeExecutor
 from .codex import CodexExecutor
+from .cursor import CursorExecutor
 from .script import ScriptExecutor
 
 # P2 宿主注册表：主链按 host 名经此分发，不直接 import 任何宿主专用模块
@@ -17,6 +18,8 @@ HOST_REGISTRY: dict[str, type[BaseExecutor]] = {
     "claude-code": ClaudeCodeExecutor,
     "claude_code": ClaudeCodeExecutor,
     "codex": CodexExecutor,
+    "cursor-agent": CursorExecutor,
+    "cursor": CursorExecutor,
     "script": ScriptExecutor,
     "api": ApiExecutor,
     "standalone": StandaloneExecutor,
@@ -54,4 +57,5 @@ from .standalone import StandaloneExecutor
 from .agent import AgentExecutor
 from .claude_code import ClaudeCodeExecutor
 from .codex import CodexExecutor
+from .cursor import CursorExecutor
 from .script import ScriptExecutor

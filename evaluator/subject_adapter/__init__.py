@@ -11,6 +11,10 @@
     claude-code  → .claude/skills/<name>/    (workspace 级目录注入)
     codex        → AGENTS.md 追加 skill 指引（AGENTS.md 约定）
     script       → .skills/<name>/           (script 宿主约定的 skills 目录)
+    cursor-agent → AGENTS.md 追加 skill 指引（Cursor Agent 工作区约定）
+
+无文件能力的宿主（agent 实验性直连 / api / standalone）登记为 NoneSubjectAdapter：
+注入请求显式报错，绝不模拟文件能力（禁止静默降级）。
 
 新增宿主只需实现 BaseSubjectAdapter 并注册到 SUBJECT_HOST_ADAPTERS。
 """
@@ -353,12 +357,50 @@ class ScriptSubjectAdapter(OpencodeSubjectAdapter):
         }
 
 
+class CursorSubjectAdapter(CodexSubjectAdapter):
+    """cursor-agent 宿主：AGENTS.md 追加 skill 指引（Cursor Agent 读取工作区 AGENTS.md）"""
+
+    host_name = "cursor-agent"
+    skill_injection = "agents-md"
+
+
+class NoneSubjectAdapter(BaseSubjectAdapter):
+    """无文件能力的宿主（agent 实验性直连 / api / standalone）。
+
+    统一到协议边界：不给这些宿主「偷摸」模拟文件能力，注入请求显式报错，
+    产物型评测任务由主链预检拦截（禁止静默降级）。
+    """
+
+    host_name = "none"
+    skill_injection = "none"
+
+    def inject_skill(self, skill_path: Path, workspace_dir: Path, skill_name: str) -> dict[str, Any]:
+        raise SubjectAdapterError(
+            f"宿主 '{self.host_name}' 无工作区文件能力，不支持 skill 注入"
+            f"（产物型评测请改用 opencode / claude-code / codex / cursor-agent / script）"
+        )
+
+    def verify_skill_loaded(self, workspace_dir: Path, skill_name: str) -> dict[str, Any]:
+        return {"loaded": False, "evidence": {"mode": "no-file-ops", "host": self.host_name}}
+
+
+class AgentSubjectAdapter(NoneSubjectAdapter):
+    """agent 宿主（实验性多轮工具循环）：无 Subject Adapter 注入能力，显式登记。"""
+
+    host_name = "agent"
+
+
 SUBJECT_HOST_ADAPTERS: dict[str, type[BaseSubjectAdapter]] = {
     "opencode": OpencodeSubjectAdapter,
     "claude-code": ClaudeCodeSubjectAdapter,
     "claude_code": ClaudeCodeSubjectAdapter,
     "codex": CodexSubjectAdapter,
+    "cursor-agent": CursorSubjectAdapter,
+    "cursor": CursorSubjectAdapter,
     "script": ScriptSubjectAdapter,
+    "agent": AgentSubjectAdapter,
+    "api": NoneSubjectAdapter,
+    "standalone": NoneSubjectAdapter,
 }
 
 

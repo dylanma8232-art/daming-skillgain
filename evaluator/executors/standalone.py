@@ -13,6 +13,7 @@ from .base import BaseExecutor, ExecutionResult
 
 
 class StandaloneExecutor(BaseExecutor):
+    host_name = "standalone"
     """独立执行器 - 内置 HTTP 客户端，直接调用模型 API"""
     
     def __init__(self, config: dict[str, Any] = None):
