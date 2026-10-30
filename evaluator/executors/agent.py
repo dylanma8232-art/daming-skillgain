@@ -94,6 +94,7 @@ TOOLS = [
 
 
 class AgentExecutor(BaseExecutor):
+    host_name = "agent"
     """Agent 执行器 - 支持工具调用"""
     
     def __init__(self, config: dict[str, Any] = None):

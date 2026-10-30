@@ -7,6 +7,7 @@ from .base import BaseExecutor, ExecutionResult
 
 
 class ApiExecutor(BaseExecutor):
+    host_name = "api"
     """直接调用模型 API"""
     
     def __init__(self, config: dict[str, Any] = None):

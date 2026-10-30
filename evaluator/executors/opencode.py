@@ -321,6 +321,7 @@ class OpencodeExecutor(BaseExecutor):
     """
 
     host_name = "opencode"
+    default_cli_path = "opencode"
     capabilities = {
         "file_ops": True,
         "skill_injection": "workspace-skills-dir",
