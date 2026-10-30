@@ -61,11 +61,24 @@ class SkillEvaluationWorkflow:
         """
         if executor:
             self.executor = executor
+            self._has_explicit_executor = True
         elif executor_config:
             self.executor = create_executor(executor_config)
+            self._has_explicit_executor = True
         else:
             # 默认使用 opencode
             self.executor = create_executor({"type": "opencode"})
+            self._has_explicit_executor = False
+
+    def _resolve_executor(self, config: dict[str, Any]) -> None:
+        """根据 config 动态解析与更新执行器（若 __init__ 未显式指定）"""
+        if self._has_explicit_executor:
+            return
+
+        exec_cfg = dict(config.get("host_config") or config.get("executor_config") or {})
+        host_type = config.get("host") or config.get("executor_type") or exec_cfg.get("type") or "opencode"
+        exec_cfg["type"] = host_type
+        self.executor = create_executor(exec_cfg)
 
     def run(self, config: dict[str, Any]) -> dict[str, Any]:
         """执行完整评测流程
@@ -92,6 +105,9 @@ class SkillEvaluationWorkflow:
             auto = bool(config.get("auto", False))
             self._force = bool(config.get("force", False))
             confirm_fn = config.get("confirm_func") or default_stage_confirm
+
+            # 动态根据 config 更新 executor（若未在 __init__ 中显式指定）
+            self._resolve_executor(config)
 
             # 步骤 1：验证配置
             self._validate_config(config)
