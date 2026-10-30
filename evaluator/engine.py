@@ -657,6 +657,22 @@ def select_models_for_reproduction(
     return selected
 
 
+# 纪律 2 补充（B6）：失败归类 —— 可重试 vs 致命
+RETRYABLE_FAILURE_REASONS = frozenset(
+    {"command_timeout", "provider_or_network_error"}
+)
+
+
+def classify_failure(failure_reason: str | None) -> str:
+    """把失败原因归类为 retryable / fatal（fatal 立即停，不空转重试）。"""
+    reason = str(failure_reason or "")
+    if reason in RETRYABLE_FAILURE_REASONS:
+        return "retryable"
+    if reason.startswith("non_zero_exit_code_124"):
+        return "retryable"
+    return "fatal"
+
+
 def _classify_execution(
     exit_code: int | None,
     stdout_text: str,
@@ -1462,7 +1478,18 @@ def analyze_existing_run(run_dir: Path) -> dict[str, Any]:
     return write_run_summary(run_dir)
 
 
-def generate_existing_run_report(run_dir: Path) -> dict[str, Any]:
+def generate_existing_run_report(run_dir: Path, force: bool = False) -> dict[str, Any]:
+    """生成 HTML 报告；B7：report.html 已存在且未 --force 时直接续跑（跳过重渲染）。"""
+    existing = run_dir / "report.html"
+    anon_existing = run_dir / "anonymous_report.html"
+    if not force and existing.exists() and anon_existing.exists():
+        LOGGER.info("报告已存在，续跑跳过重渲染（--force 可强制重生成）: %s", run_dir)
+        return {
+            "report_path": str(existing),
+            "anonymous_report_path": str(anon_existing),
+            "html_generated": True,
+            "skipped": True,
+        }
     LOGGER.info("开始为已有运行目录生成 HTML 报告: run_dir=%s", run_dir)
     output_path = generate_run_report(run_dir)
     anon_output_path = generate_anonymous_report(run_dir)
@@ -1774,6 +1801,8 @@ def run_from_plan(
     review_parallelism: int | None = None,
     progress_interval: float = 5.0,
     skip_blind_review: bool = False,
+    force: bool = False,
+    resume: bool = False,
 ) -> Path:
     import json
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -1931,7 +1960,14 @@ def run_from_plan(
             )
 
             # 纪律 3：invalid 支持重试机制（可配置最大重试次数，耗尽才判定 invalid）
-            if status == "invalid" and attempt < max_retries and not dry_run:
+            # B6：只重试 retryable（网络/超时）；fatal（能力/配置）立即停并给原因。
+            error_class = classify_failure(failure_reason)
+            if (
+                status == "invalid"
+                and error_class == "retryable"
+                and attempt < max_retries
+                and not dry_run
+            ):
                 attempt += 1
                 retry_attempts.append(
                     {
@@ -1939,6 +1975,7 @@ def run_from_plan(
                         "timestamp": datetime.now().isoformat(),
                         "exit_code": exit_code,
                         "failure_reason": failure_reason,
+                        "error_class": error_class,
                     }
                 )
                 retry_plain = {
@@ -1956,6 +1993,13 @@ def run_from_plan(
                 )
                 time.sleep(1.0)
                 continue
+            if status == "invalid" and error_class == "fatal" and not dry_run:
+                LOGGER.error(
+                    "实验遇到致命错误（%s），不重试：model=%s, mode=%s",
+                    failure_reason,
+                    plan_item["model"],
+                    "with-skill" if use_skill else "without-skill",
+                )
             break
 
         # 短执行时间检测
@@ -2082,11 +2126,12 @@ def run_from_plan(
         return result
 
     # 检查已有结果，跳过已完成的实验（断点续传）
+    # B7：默认续跑；--force 强制重跑全部实验。
     pending_plans: list[tuple[int, dict[str, Any]]] = []
     for index, plan_item in enumerate(all_plans):
         workspace_dir = Path(plan_item["workspace_dir"])
         result_file = workspace_dir / "result.json"
-        if result_file.exists():
+        if result_file.exists() and not force:
             try:
                 existing = json.loads(result_file.read_text(encoding="utf-8"))
                 indexed_results[index] = ExperimentResult(
@@ -3471,11 +3516,23 @@ def run_blind_vote_phase(
     progress: RunProgress | None = None,
     execution_mode: str | None = None,
     host: str | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     print(f"\n{'='*60}")
     print("🎯 盲评阶段")
     print(f"{'='*60}")
     print("\n📋 评审方式: 统一用户需求 + 匿名方案结果 的必选盲评")
+
+    # B7 阶段级续跑：stats.json + evaluations.json 已存在且未 --force 时跳过重评。
+    stats_marker = run_dir / "blind_vote" / "stats.json"
+    evaluations_marker = run_dir / "blind_vote" / "evaluations.json"
+    if not force and stats_marker.exists() and evaluations_marker.exists():
+        print("   ℹ️  盲评结果已存在，续跑跳过重复打分（--force 可强制重评）", flush=True)
+        try:
+            stats = json.loads(stats_marker.read_text(encoding="utf-8"))
+        except Exception:
+            stats = {"skipped": True}
+        return {"skipped": True, "stats": stats}
 
     print("\n📦 收集评测产出对...")
     pairs = collect_blind_vote_pairs(run_dir)

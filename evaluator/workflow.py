@@ -1,8 +1,12 @@
-"""标准化评测工作流 - 任何 agent 都能执行"""
+"""标准化评测工作流 - 任何 agent 都能执行
+
+B1/B2/B3：非交互（无 TTY / --non-interactive）时不停盘等回车；缺参返回结构化
+needs_user_input，绝不调用 input() 阻塞。B6/B7：显式 --resume / --force 续跑。"""
 
 from __future__ import annotations
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +20,16 @@ def default_stage_confirm(
 ) -> bool:
     """渐进式批路默认停盘确认函数 (用户硬性要求: 默认4阶段停盘等待回车确认，--auto一键到底)"""
     if auto:
+        return True
+    # B3：非 TTY 环境（被 Agent 调用）不停盘，直接放行，避免 input() 阻塞/EOF 空转。
+    try:
+        if not sys.stdin.isatty():
+            print(
+                f"⏭️  [阶段 {stage_num}/4 完成: {stage_name}] 非交互环境，自动继续",
+                flush=True,
+            )
+            return True
+    except (ValueError, OSError):
         return True
 
     print("\n" + "=" * 60, flush=True)
@@ -76,6 +90,7 @@ class SkillEvaluationWorkflow:
         """
         try:
             auto = bool(config.get("auto", False))
+            self._force = bool(config.get("force", False))
             confirm_fn = config.get("confirm_func") or default_stage_confirm
 
             # 步骤 1：验证配置
@@ -159,7 +174,18 @@ class SkillEvaluationWorkflow:
             }
 
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            # B1：needs_user_input 等结构化错误原样透出（不要包成字符串，保留
+            # missing_fields / questions，让 Agent 能直接追问）。
+            message = str(e)
+            if message.lstrip().startswith("{"):
+                try:
+                    payload = json.loads(message)
+                    if isinstance(payload, dict) and "error" in payload:
+                        payload.setdefault("success", False)
+                        return payload
+                except json.JSONDecodeError:
+                    pass
+            return {"success": False, "error": message}
 
     def _validate_config(self, config: dict[str, Any]) -> None:
         """验证配置"""
@@ -295,6 +321,8 @@ class SkillEvaluationWorkflow:
             repetitions=config.get("repetitions"),
             host=config.get("host"),
             host_config=config.get("host_config"),
+            connectivity_timeout=int(config.get("connectivity_timeout", 60) or 60),
+            non_interactive=bool(config.get("non_interactive", False)),
         )
         result = cmd_plan_generate(plan_config)
 
@@ -313,6 +341,8 @@ class SkillEvaluationWorkflow:
             parallelism=config.get("parallelism"),
             progress_interval=config.get("progress_interval", 5),
             skip_blind_review=True,
+            force=bool(config.get("force", False)),
+            resume=bool(config.get("resume", False)),
         )
 
     def _blind_vote(self, plan_dir: Path, config: dict) -> None:
@@ -327,6 +357,7 @@ class SkillEvaluationWorkflow:
             voting_models=config["voting_models"],
             parallelism=config.get("review_parallelism"),
             host=config.get("host"),
+            force=bool(config.get("force", False)),
         )
 
     def _generate_summary(self, plan_dir: Path, config: dict) -> dict:
@@ -352,5 +383,7 @@ class SkillEvaluationWorkflow:
         """生成报告"""
         from .engine import generate_existing_run_report
 
-        result = generate_existing_run_report(plan_dir)
+        result = generate_existing_run_report(
+            plan_dir, force=bool(self._force)
+        )
         return Path(result["report_path"])
