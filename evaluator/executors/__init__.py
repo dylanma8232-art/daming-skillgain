@@ -49,13 +49,19 @@ def create_executor(config: dict[str, Any]) -> BaseExecutor:
     return executor_cls(config)
 
 
-# 导出
-from .base import BaseExecutor, ExecutionResult, SessionResult, UnsupportedCapabilityError
-from .opencode import OpencodeExecutor
-from .api import ApiExecutor
-from .standalone import StandaloneExecutor
-from .agent import AgentExecutor
-from .claude_code import ClaudeCodeExecutor
-from .codex import CodexExecutor
-from .cursor import CursorExecutor
-from .script import ScriptExecutor
+__all__ = [
+    "BaseExecutor",
+    "ExecutionResult",
+    "SessionResult",
+    "UnsupportedCapabilityError",
+    "OpencodeExecutor",
+    "ApiExecutor",
+    "StandaloneExecutor",
+    "AgentExecutor",
+    "ClaudeCodeExecutor",
+    "CodexExecutor",
+    "CursorExecutor",
+    "ScriptExecutor",
+    "HOST_REGISTRY",
+    "create_executor",
+]

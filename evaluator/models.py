@@ -111,10 +111,19 @@ class EvaluationConfig:
         blocking_issues = self.preflight.get("blocking_issues", [])
         if blocking_issues:
             raise ValueError("preflight 存在阻塞问题，无法执行评测")
+        seen_input_names: dict[str, str] = {}
         for input_file in self.input_files:
             resolved_file = (config_dir / input_file).resolve()
             if not resolved_file.exists():
                 raise ValueError(f"input_files 中的文件不存在: {resolved_file}")
+            # 项 21：多源同名输入会静默覆盖，规划前拒绝重名碰撞
+            if resolved_file.name in seen_input_names:
+                raise ValueError(
+                    f"input_files 中存在同名文件，会互相覆盖: "
+                    f"{seen_input_names[resolved_file.name]} 与 {resolved_file}；"
+                    f"请改名为不同文件名或使用子目录路径区分"
+                )
+            seen_input_names[resolved_file.name] = str(resolved_file)
         for runner in self.runners:
             if runner.enabled and not runner.command_template.strip():
                 raise ValueError(f"runner {runner.name} 的 command_template 不能为空")
