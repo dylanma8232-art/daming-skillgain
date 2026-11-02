@@ -59,23 +59,31 @@ def _is_json_event_stream(text: str) -> bool:
     return event_lines >= 1 and event_lines >= len(lines[:15]) * 0.4
 
 
-def _validate_single_data_file(file_path: str, content: str) -> tuple[bool, float, dict, str]:
+def _validate_single_data_file(file_path: str, content: Any, file_full_path: Path | None = None) -> tuple[bool, float, dict, str]:
     """校验单个数据文件（CSV / JSON / XLSX）的结构完整性"""
     suffix = Path(file_path).suffix.lower()
     if suffix == ".json":
         try:
-            data = json.loads(content)
+            if isinstance(content, bytes):
+                str_content = content.decode("utf-8", errors="replace")
+            else:
+                str_content = str(content)
+            data = json.loads(str_content)
             if data is None:
                 return False, 0.0, {"file": file_path, "error": "JSON 内容为空"}, f"{file_path} 内容为 null"
             if isinstance(data, (dict, list)):
                 item_count = len(data)
-                return True, 1.0, {"file": file_path, "type": "json", "size": len(content), "items": item_count}, f"{file_path} 结构完整有效 (JSON 包含 {item_count} 项)"
-            return True, 1.0, {"file": file_path, "type": "json", "size": len(content)}, f"{file_path} JSON 解析成功"
+                return True, 1.0, {"file": file_path, "type": "json", "size": len(str_content), "items": item_count}, f"{file_path} 结构完整有效 (JSON 包含 {item_count} 项)"
+            return True, 1.0, {"file": file_path, "type": "json", "size": len(str_content)}, f"{file_path} JSON 解析成功"
         except Exception as e:
             return False, 0.0, {"file": file_path, "parse_error": str(e)}, f"{file_path} JSON 解析失败: {e}"
     elif suffix == ".csv":
         try:
-            f = io.StringIO(content)
+            if isinstance(content, bytes):
+                str_content = content.decode("utf-8", errors="replace")
+            else:
+                str_content = str(content)
+            f = io.StringIO(str_content)
             reader = list(csv.reader(f))
             if not reader or (len(reader) == 1 and not reader[0]):
                 return False, 0.0, {"file": file_path, "error": "CSV 为空"}, f"{file_path} 内容为空"
@@ -92,12 +100,23 @@ def _validate_single_data_file(file_path: str, content: str) -> tuple[bool, floa
     elif suffix in (".xlsx", ".xls"):
         try:
             import openpyxl
-            wb = openpyxl.load_workbook(io.BytesIO(content.encode("latin1", errors="ignore") if isinstance(content, str) else content), read_only=True)
-            sheets = wb.sheetnames
-            return True, 1.0, {"file": file_path, "type": "xlsx", "sheets": sheets}, f"{file_path} Excel 格式规范 (工作表: {sheets[:3]})"
+            wb = None
+            if file_full_path and file_full_path.is_file():
+                wb = openpyxl.load_workbook(file_full_path, read_only=True)
+            elif isinstance(content, bytes):
+                wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
+            elif isinstance(content, io.BytesIO):
+                wb = openpyxl.load_workbook(content, read_only=True)
+            elif isinstance(content, str):
+                wb = openpyxl.load_workbook(io.BytesIO(content.encode("latin1", errors="ignore")), read_only=True)
+            if wb is not None:
+                sheets = wb.sheetnames
+                return True, 1.0, {"file": file_path, "type": "xlsx", "sheets": sheets}, f"{file_path} Excel 格式规范 (工作表: {sheets[:3]})"
+            return False, 0.0, {"file": file_path, "error": "未提供有效内容或文件"}, f"{file_path} 文件异常"
         except ImportError:
-            if len(content) > 50:
-                return True, 1.0, {"file": file_path, "type": "excel", "bytes": len(content)}, f"{file_path} Excel 数据文件存在"
+            byte_len = len(content) if isinstance(content, (bytes, str)) else 0
+            if byte_len > 50 or (file_full_path and file_full_path.exists() and file_full_path.stat().st_size > 50):
+                return True, 1.0, {"file": file_path, "type": "excel", "bytes": byte_len}, f"{file_path} Excel 数据文件存在"
             return False, 0.0, {"file": file_path, "error": "Excel 文件过小或损坏"}, f"{file_path} 文件异常"
         except Exception as e:
             return False, 0.0, {"file": file_path, "error": str(e)}, f"{file_path} Excel 解析失败: {e}"
@@ -109,6 +128,7 @@ def _eval_csv_well_formed(rule: AssertionRule, text: str, artifacts: dict[str, A
     优先在 artifacts 中寻找真实数据文件；若无数据文件产物则判 not_applicable（不扣分），杜绝硬解析原始事件流。
     """
     target_file = rule.parameters.get("path") or rule.target
+    workspace_dir = context.get("workspace_dir")
 
     # 1. 显式指定具体产物文件名（非通配 target='output'）
     if target_file and target_file != "output":
@@ -121,7 +141,8 @@ def _eval_csv_well_formed(rule: AssertionRule, text: str, artifacts: dict[str, A
                     found_key = k
                     break
         if found_key:
-            return _validate_single_data_file(found_key, str(artifacts[found_key]))
+            full_path = Path(workspace_dir) / found_key if workspace_dir else None
+            return _validate_single_data_file(found_key, artifacts[found_key], full_path)
         else:
             must_exist = bool(rule.parameters.get("must_exist", True))
             if must_exist:
@@ -144,7 +165,8 @@ def _eval_csv_well_formed(rule: AssertionRule, text: str, artifacts: dict[str, A
         details = []
         validated_files = []
         for k, content in data_files.items():
-            ok_file, sc_file, ev_file, msg_file = _validate_single_data_file(k, str(content))
+            full_path = Path(workspace_dir) / k if workspace_dir else None
+            ok_file, sc_file, ev_file, msg_file = _validate_single_data_file(k, content, full_path)
             validated_files.append({"file": k, "passed": ok_file, "evidence": ev_file, "message": msg_file})
             if not ok_file:
                 passed_all = False
