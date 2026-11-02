@@ -492,171 +492,6 @@ def _extract_tokens_from_output_common(
 # 本模块顶部经 host_session 兼容别名重新导入。主链新代码不应再直接引用。
 
 
-def select_models_interactive(
-    available_models: list[str],
-    mode: str = "explicit",
-    default_selected: list[str] | None = None,
-    auto_detect: bool = True,
-) -> list[str]:
-    """
-    交互式选择模型
-
-    Args:
-        available_models: 可选的模型列表
-        mode: 'explicit'（明投，显示真实名称）或 'blind'（盲评，匿名化）
-        default_selected: 默认选中的模型列表
-        auto_detect: 是否自动尝试从 opencode 获取模型列表
-
-    Returns:
-        用户选择的模型列表
-    """
-    if default_selected is None:
-        default_selected = []
-
-    # 如果可用模型列表为空，尝试自动检测
-    if not available_models and auto_detect:
-        detected = get_opencode_models()
-        if detected:
-            available_models = detected
-            print(f"\n🔍 自动检测到 {len(available_models)} 个 opencode 模型")
-
-    if not available_models:
-        print("\n⚠️  未提供可用模型列表，请手动输入模型名称（逗号分隔）")
-        try:
-            answer = input("模型列表: ").strip()
-            if answer:
-                available_models = [m.strip() for m in answer.split(",") if m.strip()]
-        except EOFError:
-            pass
-
-    # 匿名映射（盲评模式）
-    anonymous_map: dict[str, str] = {}
-    if mode == "blind":
-        for i, model in enumerate(available_models):
-            anonymous_map[f"模型{chr(65 + i)}"] = model
-
-    display_models = list(anonymous_map.keys()) if mode == "blind" else available_models
-
-    print(f"\n{'='*60}")
-    if mode == "blind":
-        print("🎯 盲评模式：模型名称已匿名化")
-    else:
-        print("📋 明投模式：选择要测试的模型")
-    print(f"{'='*60}")
-    print("可用模型:")
-    for i, model in enumerate(display_models):
-        marker = ""
-        if default_selected:
-            check_model = anonymous_map.get(model, model) if mode == "blind" else model
-            if check_model in default_selected:
-                marker = " [默认]"
-        print(f"  {i+1}. {model}{marker}")
-    print("")
-    print("输入编号或多选（如: 1,3,5 或 1-3）")
-    print(f"{'='*60}")
-
-    selected = []
-    max_attempts = 3
-    for attempt in range(max_attempts):
-        try:
-            answer = input("您的选择: ").strip()
-        except EOFError:
-            answer = ""
-
-        if not answer:
-            if attempt < max_attempts - 1:
-                print("⚠️  必须明确选择模型，请输入编号")
-                continue
-            else:
-                print("❌ 未做出有效选择，退出")
-                return []
-
-        selected = parse_selection(answer, display_models)
-        if selected:
-            break
-        else:
-            if attempt < max_attempts - 1:
-                print("⚠️  无效选择，请重新输入")
-                continue
-            else:
-                print("❌ 未做出有效选择，退出")
-                return []
-
-    if mode == "blind":
-        real_models = [anonymous_map.get(m, m) for m in selected]
-        return real_models
-
-    return selected
-
-
-def parse_selection(answer: str, options: list[str]) -> list[str]:
-    """解析用户输入的选择"""
-    selected = []
-    parts = answer.split(",")
-
-    for part in parts:
-        part = part.strip()
-        if "-" in part:
-            try:
-                start, end = part.split("-")
-                start_idx = int(start.strip()) - 1
-                end_idx = int(end.strip()) - 1
-                for i in range(max(0, start_idx), min(len(options), end_idx + 1)):
-                    if options[i] not in selected:
-                        selected.append(options[i])
-            except ValueError:
-                pass
-        else:
-            try:
-                idx = int(part) - 1
-                if 0 <= idx < len(options) and options[idx] not in selected:
-                    selected.append(options[idx])
-            except ValueError:
-                pass
-
-    return selected
-
-
-def select_models_for_reproduction(
-    voted_models: list[str],
-    anonymous_map: dict[str, str] | None = None,
-) -> list[str]:
-    # 如果有匿名映射，显示匿名名称
-    display_models = []
-    reverse_map = {}
-    if anonymous_map:
-        for anon, real in anonymous_map.items():
-            display_models.append(anon)
-            reverse_map[anon] = real
-    else:
-        display_models = voted_models
-
-    print(f"\n{'='*60}")
-    print("🔄 盲评复现环节")
-    print(f"{'='*60}")
-    print("已评审的模型:")
-    for i, model in enumerate(display_models):
-        print(f"  {i+1}. {model}")
-    print("")
-    print("输入编号选择要复现评审的模型（如: 1,3 或 1-2）")
-    print(f"{'='*60}")
-
-    try:
-        answer = input("复现选择: ").strip()
-    except EOFError:
-        answer = ""
-
-    if not answer:
-        return voted_models
-
-    selected = parse_selection(answer, display_models)
-
-    if anonymous_map:
-        return [reverse_map.get(m, m) for m in selected]
-
-    return selected
-
-
 # 纪律 2 补充（B6）：失败归类 —— 可重试 vs 致命
 RETRYABLE_FAILURE_REASONS = frozenset(
     {"command_timeout", "provider_or_network_error"}
@@ -715,7 +550,7 @@ def _classify_execution(
         return False, "invalid", f"non_zero_exit_code_{exit_code}"
 
     fatal_error_without_binary_only = any(
-        keyword in combined_output for keyword in fatal_error_keywords
+        keyword in normalized_stderr for keyword in fatal_error_keywords
     ) and not any(keyword in combined_output for keyword in binary_warning_keywords)
     if fatal_error_without_binary_only:
         return False, "invalid", "fatal_stderr_error"
@@ -1139,6 +974,7 @@ class EvaluationEngine:
                 ".ruff_cache",
                 "__pycache__",
                 ".git",
+                "runs",
             ),
         )
         LOGGER.info(
@@ -1224,11 +1060,6 @@ class EvaluationEngine:
 
     def slugify(self, value: str) -> str:
         return value.replace("/", "_").replace(" ", "-")
-
-    def _extract_tokens_from_output(
-        self, stdout_text: str, stderr_text: str, model: str
-    ) -> dict | None:
-        return _extract_tokens_from_output_common(stdout_text, stderr_text)
 
     def _result_to_dict(self, result: ExperimentResult) -> dict[str, Any]:
         d = asdict(result)
@@ -1317,13 +1148,6 @@ class EvaluationEngine:
         )
         write_json(plan.workspace_dir / "result.json", self._result_to_dict(result))
         return result
-
-    def normalize_subprocess_output(self, value: str | bytes | None) -> str:
-        if value is None:
-            return ""
-        if isinstance(value, bytes):
-            return value.decode("utf-8", errors="replace")
-        return value
 
     def execute_plan_safe(
         self, runner: RunnerConfig, plan: ExperimentPlan, dry_run: bool
@@ -1419,6 +1243,7 @@ class EvaluationEngine:
             self.config.blind_review_models,
             execution_mode=self.config.execution_mode,
             host=resolve_config_host(self.config),
+            host_config=resolve_config_host_config(self.config),
         )
         write_run_summary(run_dir)
         LOGGER.info("评测运行、盲评与汇总分析完成: run_dir=%s", run_dir)
@@ -1448,13 +1273,6 @@ class EvaluationEngine:
         return {"run_dir": str(run_dir), "plans": plans}
 
 
-def load_config(config_path: Path) -> EvaluationConfig:
-    import json
-
-    raw = json.loads(config_path.read_text(encoding="utf-8"))
-    return EvaluationConfig.from_dict(raw)
-
-
 def _run_blind_review_stage(
     run_dir: Path,
     voting_models: list[str],
@@ -1462,6 +1280,8 @@ def _run_blind_review_stage(
     progress: RunProgress | None = None,
     execution_mode: str = "cli-attach",
     host: str | None = None,
+    host_config: dict[str, Any] | None = None,
+    force: bool = False,
 ) -> None:
     """执行必选盲评阶段；失败时记录日志，但不阻断后续汇总与报告。"""
     if not voting_models:
@@ -1477,6 +1297,8 @@ def _run_blind_review_stage(
             progress=progress,
             execution_mode=execution_mode,
             host=host,
+            host_config=host_config,
+            force=force,
         )
         LOGGER.info("盲评阶段完成")
     except Exception as e:
@@ -1516,6 +1338,7 @@ def run_summary_stage(
     timeout_seconds: int = 300,
     execution_mode: str = "cli-attach",
     host: str | None = None,
+    host_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """基于评委评价生成结构化洞察结论"""
     print(f"\n{'='*60}")
@@ -1538,9 +1361,24 @@ def run_summary_stage(
     judge_evaluations_text = ""
     vote_stats_text = ""
 
+    # 项 16：各评委独立打乱选项标签，方案A 在不同评委间指向不同工作区；
+    # 汇总前必须把标签归一化回稳定的 (模型, 模式) 标识。
+    workspace_to_identity: dict[str, str] = {}
+    pairs_path = run_dir / "blind_vote" / "pairs.json"
+    if pairs_path.exists():
+        try:
+            for pair in json.loads(pairs_path.read_text(encoding="utf-8")):
+                model = pair.get("model", "")
+                if pair.get("with_skill_workspace"):
+                    workspace_to_identity[pair["with_skill_workspace"]] = f"{model}（with-skill）"
+                if pair.get("without_skill_workspace"):
+                    workspace_to_identity[pair["without_skill_workspace"]] = f"{model}（without-skill）"
+        except Exception:
+            pass
+
     if evals_path.exists():
         evals = json.loads(evals_path.read_text(encoding="utf-8"))
-        eval_lines = ["【评委原始评价汇总】"]
+        eval_lines = ["【评委原始评价汇总（已归一化到稳定方案标识）】"]
         for eval_item in evals:
             voting_model = eval_item.get("voting_model", "unknown")
             eval_lines.append(f"\n--- 评委: {voting_model} ---")
@@ -1548,11 +1386,15 @@ def run_summary_stage(
                 overall = ev.get("overall", "")
                 all_ev = ev.get("all_evaluations", {}) or {}
                 reasons = ev.get("reasons", {}) or {}
+                workspace_evaluations = ev.get("workspace_evaluations", {}) or {}
                 if overall:
                     eval_lines.append(f"总体评价: {overall}")
                 for label, evaluation in all_ev.items():
                     reason = reasons.get(label, "")
-                    eval_lines.append(f"  {label}: {evaluation[:200]}...")
+                    # 项 16：把评委打乱后的标签映射回稳定的 (模型, 模式) 标识
+                    workspace = workspace_evaluations.get(label, "")
+                    identity = workspace_to_identity.get(workspace, label)
+                    eval_lines.append(f"  {identity}: {evaluation[:200]}...")
         judge_evaluations_text = "\n".join(eval_lines)
 
     if stats_path.exists():
@@ -1590,7 +1432,7 @@ def run_summary_stage(
     "overall": "一句话结论",
     "overall_reason": "为什么",
     "scheme_summaries": {{
-        "方案A": {{
+        "<模型名>（with-skill）": {{
             "summary": "评委怎么评价这个方案",
             "votes": 票数,
             "mode": "with-skill 或 without-skill"
@@ -1600,6 +1442,9 @@ def run_summary_stage(
     "skill_not_helped": ["具体差在哪"],
     "suggestion": "建议"
 }}
+
+**方案标识说明：** 评委评价里的「方案」已归一化为「模型名（with-skill / without-skill）」这样的稳定标识；
+scheme_summaries 的键必须使用这些稳定标识，不要自创方案A/B之类的随机标签。
 
 **九个去AI味规则（必须遵守）：**
 
@@ -1662,6 +1507,7 @@ def run_summary_stage(
             execution_mode=execution_mode,
             workspace_dir=str(run_dir),
             host=host,
+            host_config=host_config,
         )
         # 尝试解析JSON
         summary_data = _extract_json_object_from_text(result)
@@ -1689,6 +1535,7 @@ def _call_host_model(
     execution_mode: str,
     workspace_dir: str,
     host: str | None = None,
+    host_config: dict[str, Any] | None = None,
 ) -> str:
     """经统一宿主调度层调用模型（盲评评委 / 总结模型共用），返回模型文本输出。"""
     return run_host_text(
@@ -1698,6 +1545,7 @@ def _call_host_model(
         timeout_seconds=timeout_seconds,
         execution_mode=execution_mode,
         workspace_dir=workspace_dir,
+        host_config=host_config,
     )
 
 
@@ -1888,24 +1736,28 @@ def run_from_plan(
             }
         else:
             if subject_adapter is not None:
+                inject_failed = False
                 try:
                     # run_from_plan 直接执行路径：确保 skill 已按宿主规则注入（幂等）
                     subject_adapter.inject_skill(
                         config.target_skill_path, workspace_dir, config.target_skill
                     )
                 except Exception as inject_err:
-                    LOGGER.warning(
-                        "Subject Adapter 注入异常（继续执行）: %s", inject_err
+                    inject_failed = True
+                    LOGGER.error(
+                        "Subject Adapter 注入失败（实验将标记为 invalid）: %s", inject_err
                     )
                 verify = subject_adapter.verify_skill_loaded(
                     workspace_dir, config.target_skill
                 )
-                skill_loaded = bool(verify["loaded"]) or bool(config.target_skill)
+                # 项 4：不再用 target_skill 非空强行兜底；必须加载验证通过才算 with-skill
+                skill_loaded = bool(verify["loaded"]) and not inject_failed
                 loading_evidence = {
                     **verify["evidence"],
                     "target_skill": config.target_skill,
                     "mode": "with-skill",
                     "workspace_isolated": True,
+                    "inject_failed": inject_failed,
                 }
             else:
                 skill_loaded = bool(config.target_skill)
@@ -1928,6 +1780,14 @@ def run_from_plan(
         attempt = 0
 
         while True:
+            # 项 7：每次执行尝试前清空产物目录，避免 force 重跑/重试时收集到上一轮的遗留产物
+            if artifacts_dir.exists():
+                for item in artifacts_dir.iterdir():
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    else:
+                        item.unlink(missing_ok=True)
+
             start_time = datetime.now()
             execution_metrics = ExecutionMetrics(start_time=start_time.isoformat())
 
@@ -2022,6 +1882,16 @@ def run_from_plan(
         ):
             status = "failure"
             failure_reason = "empty_product"
+
+        # 项 4：with-skill 实验若注入/加载验证失败，标记 invalid，禁止假对照
+        if use_skill and not skill_loaded:
+            success = False
+            status = "invalid"
+            failure_reason = "skill_not_loaded"
+            LOGGER.error(
+                "skill 注入/加载验证失败，实验标记为 invalid: model=%s",
+                plan_item["model"],
+            )
 
         is_valid = status != "invalid"
 
@@ -2120,7 +1990,10 @@ def run_from_plan(
             loading_evidence=loading_evidence,
             retry_attempts=retry_attempts,
         )
-        write_json(workspace_dir / "result.json", asdict(temp_result))
+        result_dict = asdict(temp_result)
+        # 项 9：区分 dry-run 模拟结果与可复用的真实执行结果，防止演练产物阻碍后续真实运行
+        result_dict["dry_run"] = bool(dry_run)
+        write_json(workspace_dir / "result.json", result_dict)
         return temp_result
 
     def execute_one_with_progress(
@@ -2154,6 +2027,10 @@ def run_from_plan(
         if result_file.exists() and not force:
             try:
                 existing = json.loads(result_file.read_text(encoding="utf-8"))
+                # 项 9：dry-run 的 result.json 不算可复用结果，仍需真实执行
+                if existing.get("dry_run"):
+                    pending_plans.append((index, plan_item))
+                    continue
                 indexed_results[index] = ExperimentResult(
                     runner_name=existing.get("runner_name")
                     or resolve_config_host(config)
@@ -2305,6 +2182,7 @@ def run_from_plan(
         assertion_engine = AssertionEngine()
         assertion_records = []
         for res in results:
+            workspace_dir = Path(res.workspace_dir)
             stdout_content = ""
             if Path(res.stdout_file).exists():
                 try:
@@ -2313,6 +2191,37 @@ def run_from_plan(
                     )
                 except Exception:
                     pass
+            # 项 15：快照记录真实断言输入（含产物内容与 transcript），而非空字符串，
+            # 保证离线回放与实时评估结果一致。
+            transcript_content = ""
+            if Path(res.transcript_file).exists():
+                try:
+                    transcript_content = Path(res.transcript_file).read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                except Exception:
+                    pass
+            output_text = stdout_content
+            if transcript_content and transcript_content.strip() != stdout_content.strip():
+                output_text = stdout_content + "\n" + transcript_content
+
+            artifacts_map = {}
+            max_bytes = 500 * 1024
+            for art_rel in res.artifacts:
+                art_full = workspace_dir / art_rel
+                suffix = art_full.suffix.lower()
+                try:
+                    is_binary = suffix in BINARY_EXTENSIONS and suffix not in TEXT_EXTENSIONS
+                    if is_binary:
+                        with art_full.open("rb") as f_bin:
+                            data = f_bin.read(max_bytes)
+                        artifacts_map[art_rel] = f"[binary {len(data)} bytes]"
+                    else:
+                        with art_full.open("r", encoding="utf-8", errors="replace") as f_txt:
+                            artifacts_map[art_rel] = f_txt.read(max_bytes)
+                except Exception:
+                    artifacts_map.setdefault(art_rel, "")
+
             assertion_records.append(
                 {
                     "model": res.model,
@@ -2321,8 +2230,8 @@ def run_from_plan(
                     "status": res.status,
                     "success": res.success,
                     "is_valid": res.is_valid,
-                    "output_text": stdout_content,
-                    "artifacts": {a: "" for a in res.artifacts},
+                    "output_text": output_text,
+                    "artifacts": artifacts_map,
                     "results": res.analysis.get("assertions", {}).get("results", []),
                 }
             )
@@ -2346,6 +2255,8 @@ def run_from_plan(
             progress=progress,
             execution_mode=config.execution_mode,
             host=resolve_config_host(config),
+            host_config=resolve_config_host_config(config),
+            force=force,
         )
         # 总结阶段：基于评委评价生成结构化洞察
         if config.summary_model:
@@ -2357,6 +2268,7 @@ def run_from_plan(
                     config.summary_model,
                     execution_mode=config.execution_mode,
                     host=resolve_config_host(config),
+                    host_config=resolve_config_host_config(config),
                 )
                 progress.task_finished("summary:insight", True)
             except Exception as e:
@@ -2454,59 +2366,6 @@ def _extract_evaluation_dimensions(content: str) -> dict[str, Any]:
         "with_skill": [dict(item) for item in shared_dims],
         "without_skill": [dict(item) for item in shared_dims],
     }
-
-
-def _generate_default_evaluation_dimensions(content: str) -> list[dict[str, Any]]:
-    """当 SKILL.md 没有定义评测维度时，自动生成默认维度"""
-    import re
-
-    has_phases = bool(re.search(r"(?:Phase|阶段)[：:\s]+\d+", content, re.IGNORECASE))
-    has_constraints = bool(re.search(r"(?:必须|禁止|不得|不能|确保)", content))
-
-    dims = []
-
-    dims.append(
-        {
-            "name": "用户需求满足度",
-            "weight": 40,
-            "verification": "验证输出是否真正回答了用户的问题。",
-        }
-    )
-
-    if has_phases:
-        dims.append(
-            {
-                "name": "流程合规性",
-                "weight": 25,
-                "verification": "验证是否按 skill 承诺的流程执行了所有阶段。",
-            }
-        )
-
-    if has_constraints:
-        dims.append(
-            {
-                "name": "规范遵守度",
-                "weight": 15,
-                "verification": "验证是否遵守了 skill 定义的约束规则。",
-            }
-        )
-
-    dims.append(
-        {
-            "name": "产出内容质量",
-            "weight": 20 if len(dims) == 2 else 20 - (15 if has_constraints else 0),
-            "verification": "读取产出文件内容，验证质量。",
-        }
-    )
-
-    total_weight = sum(d["weight"] for d in dims)
-    if total_weight != 100:
-        scale = 100 / total_weight
-        for d in dims:
-            d["weight"] = int(d["weight"] * scale)
-        dims[-1]["weight"] += 100 - sum(d["weight"] for d in dims)
-
-    return dims
 
 
 def _summarize_skill_for_judge(content: str) -> str:
@@ -2644,6 +2503,7 @@ def conduct_blind_vote(
     progress: RunProgress | None = None,
     execution_mode: str = "cli-attach",
     host: str | None = None,
+    host_config: dict[str, Any] | None = None,
 ) -> list[BlindEvaluationResult]:
     """执行批量盲评：评委一次性看所有方案并分发N票（经统一宿主调度层）。"""
     return _conduct_batch_vote(
@@ -2655,6 +2515,7 @@ def conduct_blind_vote(
         progress,
         execution_mode,
         host,
+        host_config,
     )
 
 
@@ -2667,6 +2528,7 @@ def _conduct_batch_vote(
     progress: RunProgress | None = None,
     execution_mode: str = "cli-attach",
     host: str | None = None,
+    host_config: dict[str, Any] | None = None,
 ) -> list[BlindEvaluationResult]:
     """批量盲评：每个评委一次性看所有有用户验收产物的方案，分发N票给最好的。
 
@@ -2760,6 +2622,7 @@ def _conduct_batch_vote(
             timeout_seconds,
             execution_mode,
             host,
+            host_config,
         )
 
         if progress:
@@ -2816,7 +2679,6 @@ def _build_batch_eval_prompt(
         evidence = _build_evidence_bundle(opt["workspace"], task_prompt=task_prompt)
         evidence_sections.append(f"""
 ## {label}
-<!-- 评委看不到此信息，仅供系统内部追踪: 模型编号={opt['original_idx']}, 模式={opt['mode']} -->
 证据内容:
 {evidence if evidence else '[无产出文件]'}
 """)
@@ -2874,6 +2736,7 @@ def _execute_batch_eval_command(
     timeout_seconds: int,
     execution_mode: str = "cli-attach",
     host: str | None = None,
+    host_config: dict[str, Any] | None = None,
 ) -> BlindEvaluationResult | None:
     """执行批量盲评（P2: 评委调用经统一宿主调度层分发，不再绑定 OpenCode）"""
 
@@ -2888,6 +2751,7 @@ def _execute_batch_eval_command(
             execution_mode=execution_mode,
             format_json=False,
             dangerous_skip_permissions=True,
+            host_config=host_config,
         )
         raw_text = session.combined_text()
 
@@ -2994,11 +2858,6 @@ def _parse_batch_vote_payload(
     except Exception:
         pass
     return {"votes": [], "reasons": {}, "all_evaluations": {}, "overall": ""}
-
-
-def _parse_batch_votes(text: str, label_to_option: dict[str, dict]) -> list[str]:
-    """兼容旧调用：只返回投票标签。"""
-    return _parse_batch_vote_payload(text, label_to_option)["votes"]
 
 
 # ============================================================
@@ -3536,6 +3395,7 @@ def run_blind_vote_phase(
     progress: RunProgress | None = None,
     execution_mode: str | None = None,
     host: str | None = None,
+    host_config: dict[str, Any] | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
     print(f"\n{'='*60}")
@@ -3585,6 +3445,11 @@ def run_blind_vote_phase(
                 execution_mode = str(
                     config_snapshot.get("execution_mode") or "cli-attach"
                 )
+                # 项 2：快照里保存了宿主配置时，除非显式覆盖，否则恢复保存的 host 与 host_config
+                if host is None:
+                    host = config_snapshot.get("host") or None
+                if host_config is None:
+                    host_config = config_snapshot.get("host_config") or None
             except Exception:
                 execution_mode = "cli-attach"
         else:
@@ -3610,6 +3475,7 @@ def run_blind_vote_phase(
         progress=progress,
         execution_mode=execution_mode,
         host=host,
+        host_config=host_config,
     )
     if not eval_results:
         return {"error": "blind_review_failed", "message": "盲评未返回任何结果"}

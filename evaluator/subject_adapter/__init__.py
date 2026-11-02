@@ -177,7 +177,7 @@ class OpencodeSubjectAdapter(BaseSubjectAdapter):
         src = find_skill_root(Path(skill_path))
         shutil.copytree(
             src, target,
-            ignore=shutil.ignore_patterns(".DS_Store", ".pytest_cache", "__pycache__", ".git"),
+            ignore=shutil.ignore_patterns(".DS_Store", ".pytest_cache", "__pycache__", ".git", "runs"),
         )
         # opencode.json 权限放行（沿用主链历史约定）
         import json
@@ -227,7 +227,7 @@ class ClaudeCodeSubjectAdapter(OpencodeSubjectAdapter):
         src = find_skill_root(Path(skill_path))
         shutil.copytree(
             src, target,
-            ignore=shutil.ignore_patterns(".DS_Store", ".pytest_cache", "__pycache__", ".git"),
+            ignore=shutil.ignore_patterns(".DS_Store", ".pytest_cache", "__pycache__", ".git", "runs"),
         )
         return {"skill_dir": str(target), "marker": self.skill_injection, "skill_md": str(target / "SKILL.md")}
 
@@ -287,7 +287,7 @@ class CodexSubjectAdapter(BaseSubjectAdapter):
         trace_dir = workspace_dir / ".daming-skillgain" / "skills" / skill_name
         if trace_dir.exists():
             shutil.rmtree(trace_dir)
-        shutil.copytree(src, trace_dir, ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", ".git"))
+        shutil.copytree(src, trace_dir, ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", ".git", "runs"))
         return {"skill_dir": str(trace_dir), "marker": self.skill_injection, "agents_md": str(agents_md)}
 
     def verify_skill_loaded(self, workspace_dir: Path, skill_name: str) -> dict[str, Any]:
@@ -339,7 +339,7 @@ class ScriptSubjectAdapter(OpencodeSubjectAdapter):
         if target.exists():
             shutil.rmtree(target)
         src = find_skill_root(Path(skill_path))
-        shutil.copytree(src, target, ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", ".git"))
+        shutil.copytree(src, target, ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", ".git", "runs"))
         return {"skill_dir": str(target), "marker": self.skill_injection, "skill_md": str(target / "SKILL.md")}
 
     def verify_skill_loaded(self, workspace_dir: Path, skill_name: str) -> dict[str, Any]:

@@ -5,6 +5,7 @@ R1：payload 组装在 report_payload.py，模板在 report_template.py。
 """
 from __future__ import annotations
 
+import base64
 import html
 import json
 import logging

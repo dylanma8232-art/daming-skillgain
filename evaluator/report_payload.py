@@ -44,11 +44,26 @@ LOGGER = logging.getLogger(__name__)
 def load_blind_vote_data(run_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, str], dict[str, dict[str, str]]]:
     blind_vote_stats: list[dict[str, Any]] = []
     vote_details: list[dict[str, Any]] = []
-    scheme_label_map: dict[str, str] = {}
-    scheme_critiques: dict[str, dict[str, str]] = {}
+    # 项 16：不再按评委打乱后的随机标签汇总，统一归一化回稳定的工作区唯一标识（工作区名）。
+    scheme_label_map: dict[str, str] = {}  # workspace_name -> 稳定标识
+    scheme_critiques: dict[str, dict[str, str]] = {}  # workspace_name -> {voting_model: text}
     blind_vote_dir = run_dir / "blind_vote"
     if not blind_vote_dir.exists():
         return blind_vote_stats, vote_details, scheme_label_map, scheme_critiques
+
+    # 从 pairs.json 建立 workspace -> 稳定标识（模型名 + 模式），独立于评委打乱的标签
+    workspace_to_identity: dict[str, str] = {}
+    pairs_path = blind_vote_dir / "pairs.json"
+    if pairs_path.exists():
+        try:
+            for pair in json.loads(pairs_path.read_text(encoding="utf-8")):
+                model = pair.get("model", "")
+                if pair.get("with_skill_workspace"):
+                    workspace_to_identity[pair["with_skill_workspace"]] = f"{model}（with-skill）"
+                if pair.get("without_skill_workspace"):
+                    workspace_to_identity[pair["without_skill_workspace"]] = f"{model}（without-skill）"
+        except Exception:
+            pass
 
     stats_path = blind_vote_dir / "stats.json"
     if stats_path.exists():
@@ -106,47 +121,54 @@ def load_blind_vote_data(run_dir: Path) -> tuple[list[dict[str, Any]], list[dict
                         if not isinstance(ev, dict):
                             continue
                         workspace_votes = ev.get("workspace_votes", {})
-                        if isinstance(workspace_votes, dict):
-                            for label, workspace in workspace_votes.items():
-                                if label not in scheme_label_map:
-                                    scheme_label_map[label] = workspace
                         workspace_evaluations = ev.get("workspace_evaluations", {})
-                        if isinstance(workspace_evaluations, dict):
-                            for label, workspace in workspace_evaluations.items():
-                                if label not in scheme_label_map:
-                                    scheme_label_map[label] = workspace
                         reasons = ev.get("reasons", {})
                         all_evaluations = ev.get("all_evaluations") or ev.get("evaluations_by_label") or ev.get("逐方案评价") or {}
                         overall = ev.get("overall", "")
                         voting_model = eval_item.get("voting_model", "unknown")
+
+                        # 项 16：把评委打乱后的标签映射回稳定工作区标识，按工作区聚合
+                        def _ws_key(workspace: str) -> str:
+                            ws_name = Path(workspace).name if workspace else ""
+                            if workspace and workspace in workspace_to_identity:
+                                scheme_label_map[ws_name] = workspace_to_identity[workspace]
+                            return ws_name
+
+                        if isinstance(workspace_evaluations, dict):
+                            for _label, workspace in workspace_evaluations.items():
+                                _ws_key(workspace)
+                        if isinstance(workspace_votes, dict):
+                            for _label, workspace in workspace_votes.items():
+                                _ws_key(workspace)
+
                         if isinstance(all_evaluations, dict):
                             for label, reason in all_evaluations.items():
-                                if label not in scheme_critiques:
-                                    scheme_critiques[label] = {}
+                                workspace = workspace_evaluations.get(label, "")
+                                ws_name = _ws_key(workspace)
+                                if not ws_name:
+                                    continue
+                                if ws_name not in scheme_critiques:
+                                    scheme_critiques[ws_name] = {}
                                 if str(reason).strip():
-                                    scheme_critiques[label][voting_model] = str(reason).strip()
+                                    scheme_critiques[ws_name][voting_model] = str(reason).strip()
                         if isinstance(reasons, dict):
                             for label, reason in reasons.items():
-                                if label not in scheme_critiques:
-                                    scheme_critiques[label] = {}
-                                scheme_critiques[label][voting_model] = reason
+                                workspace = workspace_evaluations.get(label, "") or workspace_votes.get(label, "")
+                                ws_name = _ws_key(workspace)
+                                if not ws_name:
+                                    continue
+                                if ws_name not in scheme_critiques:
+                                    scheme_critiques[ws_name] = {}
+                                scheme_critiques[ws_name][voting_model] = reason
                         if overall:
-                            all_labels_in_overall = _RE_SCHEME_LABEL.findall(overall)
-                            for label in all_labels_in_overall:
-                                if label not in scheme_critiques:
-                                    scheme_critiques[label] = {}
-                                if voting_model not in scheme_critiques[label]:
-                                    pattern = rf"{re.escape(label)}[^，,；;。]*"
-                                    match = re.search(pattern, overall)
-                                    if match:
-                                        scheme_critiques[label][voting_model] = match.group(0).strip()
-                                    else:
-                                        scheme_critiques[label][voting_model] = overall
-                            for label in workspace_votes.keys():
-                                if label not in scheme_critiques:
-                                    scheme_critiques[label] = {}
-                                if voting_model not in scheme_critiques[label]:
-                                    scheme_critiques[label][voting_model] = overall
+                            for label, workspace in workspace_evaluations.items():
+                                ws_name = _ws_key(workspace)
+                                if not ws_name:
+                                    continue
+                                if ws_name not in scheme_critiques:
+                                    scheme_critiques[ws_name] = {}
+                                if voting_model not in scheme_critiques[ws_name]:
+                                    scheme_critiques[ws_name][voting_model] = overall
         except Exception as e:
             LOGGER.warning("读取 blind eval 详情失败: %s", e)
 
@@ -478,17 +500,9 @@ def build_report_payload(run_dir: Path, manifest: dict[str, Any]) -> dict[str, A
     blind_vote_stats, vote_details, scheme_label_map, scheme_critiques = load_blind_vote_data(run_dir)
     blind_vote_map = {item.get("model"): item for item in blind_vote_stats}
 
-    workspace_to_label: dict[str, str] = {}
-    for label, workspace in scheme_label_map.items():
-        ws_path = Path(workspace)
-        ws_name = ws_path.name
-        workspace_to_label[ws_name] = label
+    workspace_to_label: dict[str, str] = dict(scheme_label_map)  # ws_name -> 稳定标识
     workspace_to_critiques: dict[str, list[str]] = {}
-    for label, critiques in scheme_critiques.items():
-        workspace = scheme_label_map.get(label)
-        if not workspace:
-            continue
-        ws_name = Path(workspace).name
+    for ws_name, critiques in scheme_critiques.items():
         values = [
             str(reason).strip()
             for _judge, reason in sorted(critiques.items())
