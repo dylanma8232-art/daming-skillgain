@@ -144,3 +144,12 @@
 - **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/62
 - **改动文件**：
 - 
+
+## 2026-11-02 03:42 迭代
+
+- **PR**：63 Fix OpenCode cli_path forwarding and ScriptExecutor relative path resolution
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/63
+- **改动文件**：
+- evaluator/executors/opencode.py
+- evaluator/executors/script.py
+- tests/test_executor_cli_and_script_path.py
