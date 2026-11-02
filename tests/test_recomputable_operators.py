@@ -155,8 +155,9 @@ def test_csv_column_empty():
         }
     )
     res = evaluate_recomputable(rule, csv_text)
-    # Operands will be empty, sum([]) is 0, so it will pass
-    assert res.passed
+    # 列未匹配到任何数据不得回退为空操作数求和（项 23），应判定不通过
+    assert not res.passed
+    assert res.error == "csv_no_matching_rows"
 
 def test_claimed_regex():
     text = "The total sales were 1,234.56 dollars."

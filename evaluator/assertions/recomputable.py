@@ -87,8 +87,30 @@ def evaluate_recomputable(rule: AssertionRule, target_content: Any) -> Assertion
                     if num is not None:
                         col_vals.append(num)
             operands = col_vals
-        except Exception:
-            operands = []
+        except Exception as e:
+            # 项 23：CSV 解析失败不得回退为空操作数（空操作数求和会得到 0，产生虚假通过）
+            return AssertionResult(
+                name=rule.name,
+                type=AssertionType.RECOMPUTABLE.value,
+                passed=False,
+                score=0.0,
+                weight=rule.weight,
+                evidence={"csv_column": csv_column, "parse_error": str(e)},
+                message=f"CSV 解析失败，无法从列 {csv_column} 提取操作数: {e}",
+                error="csv_parse_failed",
+            )
+        if not operands:
+            # 项 23：指定了 csv_column 但未匹配到任何可解析数据，判定不通过，禁止回退为空操作数
+            return AssertionResult(
+                name=rule.name,
+                type=AssertionType.RECOMPUTABLE.value,
+                passed=False,
+                score=0.0,
+                weight=rule.weight,
+                evidence={"csv_column": csv_column},
+                message=f"CSV 列 {csv_column} 未匹配到任何可解析的操作数，判定不通过",
+                error="csv_no_matching_rows",
+            )
 
     # 规范化操作数为浮点数列表
     numeric_operands: list[float] = []
