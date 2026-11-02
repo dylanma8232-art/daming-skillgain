@@ -56,8 +56,11 @@ TEXT_EXTENSIONS = {
     ".csv",
     ".py",
     ".js",
+    ".jsx",
     ".ts",
     ".tsx",
+    ".vue",
+    ".svelte",
     ".sql",
     ".yaml",
     ".yml",
@@ -77,6 +80,14 @@ OUTPUT_EXTENSIONS = {
     ".doc": ("primary", "Word 文档"),
     ".pdf": ("primary", "PDF 结果文件"),
     ".json": ("supporting", "结构化结果文件"),
+    ".tsx": ("primary", "TSX 组件代码"),
+    ".ts": ("primary", "TypeScript 代码"),
+    ".jsx": ("primary", "JSX 组件代码"),
+    ".js": ("primary", "JavaScript 代码"),
+    ".vue": ("primary", "Vue 组件代码"),
+    ".svelte": ("primary", "Svelte 组件代码"),
+    ".sql": ("primary", "SQL 脚本"),
+    ".py": ("primary", "Python 代码"),
 }
 
 
@@ -172,7 +183,7 @@ def _declared_skill_outputs(skill_path: str | Path | None) -> list[tuple[str, st
     content = skill_md.read_text(encoding="utf-8", errors="replace").lower()
     declared: list[tuple[str, str, str]] = []
     seen: set[str] = set()
-    for raw_ext in re.findall(r"\.(pptx?|xlsx|xls|csv|md|markdown|html?|docx?|pdf|json)\b", content):
+    for raw_ext in re.findall(r"\.(pptx?|xlsx|xls|csv|md|markdown|html?|docx?|pdf|json|tsx?|jsx?|vue|svelte|sql|py)\b", content):
         ext = "." + raw_ext.lstrip(".").lower()
         if ext == ".ppt":
             ext = ".pptx"
@@ -235,11 +246,23 @@ def _manifest_candidates(artifacts_dir: Path) -> dict[str, dict[str, Any]]:
     return candidates
 
 
-def _is_process_file(path: Path) -> bool:
-    rel = str(path).lower()
+def _is_process_file(path: Path, base_dir: Path | None = None) -> bool:
     name = path.name.lower()
     if name in EVIDENCE_NAMES:
         return True
+
+    if base_dir is not None:
+        try:
+            rel = str(path.relative_to(base_dir)).lower()
+        except ValueError:
+            rel = name
+    else:
+        # If relative path is passed or already relative
+        if not path.is_absolute():
+            rel = str(path).lower()
+        else:
+            rel = name
+
     return any(keyword in rel for keyword in EVIDENCE_KEYWORDS)
 
 
@@ -275,9 +298,16 @@ def _is_parseable(path: Path) -> tuple[bool, str]:
     return True, ""
 
 
-def _score_candidate(path: Path, expected: dict[str, Any], manifest_item: dict[str, Any] | None) -> tuple[int, int, str]:
-    rel = str(path).lower()
+def _score_candidate(path: Path, expected: dict[str, Any], manifest_item: dict[str, Any] | None, base_dir: Path | None = None) -> tuple[int, int, str]:
     name = path.name.lower()
+    if base_dir is not None:
+        try:
+            rel = str(path.relative_to(base_dir)).lower()
+        except ValueError:
+            rel = name
+    else:
+        rel = str(path).lower() if not path.is_absolute() else name
+
     score = 0
     if manifest_item:
         score += 80
@@ -291,7 +321,7 @@ def _score_candidate(path: Path, expected: dict[str, Any], manifest_item: dict[s
         score -= 10
     if expected.get("role") == "primary" and any(k in rel for k in ("final", "最终", "report", "报告", "presentation", "ppt")):
         score += 15
-    if _is_process_file(path):
+    if _is_process_file(path, base_dir=base_dir):
         score -= 120
     try:
         size = path.stat().st_size
@@ -307,13 +337,13 @@ def _select_for_expected(
     manifest_map: dict[str, dict[str, Any]],
 ) -> dict[str, Any] | None:
     ext = expected["ext"]
-    ext_matches = [f for f in files if f.suffix.lower() == ext and not _is_process_file(f)]
+    ext_matches = [f for f in files if f.suffix.lower() == ext and not _is_process_file(f, base_dir=artifacts_dir)]
     manifest_matches = []
     for rel, item in manifest_map.items():
         path = artifacts_dir / rel
-        if path.exists() and path.suffix.lower() == ext and not _is_process_file(path):
+        if path.exists() and path.suffix.lower() == ext and not _is_process_file(path, base_dir=artifacts_dir):
             manifest_matches.append(path)
-    candidates = sorted(set(ext_matches + manifest_matches), key=lambda p: _score_candidate(p, expected, manifest_map.get(str(p.relative_to(artifacts_dir)))))
+    candidates = sorted(set(ext_matches + manifest_matches), key=lambda p: _score_candidate(p, expected, manifest_map.get(str(p.relative_to(artifacts_dir))), base_dir=artifacts_dir))
     for path in candidates:
         ok, reason = _is_parseable(path)
         if not ok:
@@ -370,12 +400,12 @@ def select_result_files(
 
     if not selected and files and not missing:
         fallback_expected = {"ext": "", "role": "primary", "label": "兜底识别结果文件", "source": "fallback", "required": True}
-        fallback_candidates = [f for f in files if not _is_process_file(f)]
+        fallback_candidates = [f for f in files if not _is_process_file(f, base_dir=artifacts_dir)]
         fallback_candidates = sorted(
             fallback_candidates,
             key=lambda p: (
                 0 if p.suffix.lower() in {".pptx", ".xlsx", ".html", ".pdf", ".md", ".csv"} else 1,
-                _score_candidate(p, fallback_expected, manifest_map.get(str(p.relative_to(artifacts_dir)))),
+                _score_candidate(p, fallback_expected, manifest_map.get(str(p.relative_to(artifacts_dir))), base_dir=artifacts_dir),
             ),
         )
         for path in fallback_candidates:
@@ -406,7 +436,7 @@ def select_result_files(
             "name": path.name,
             "path": rel,
             "size": path.stat().st_size,
-            "type": "process_evidence" if _is_process_file(path) else "supporting_artifact",
+            "type": "process_evidence" if _is_process_file(path, base_dir=artifacts_dir) else "supporting_artifact",
         })
 
     confidence = max((float(item.get("confidence", 0)) for item in selected), default=0.0)
