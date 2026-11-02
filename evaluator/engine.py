@@ -2034,20 +2034,29 @@ def run_from_plan(
 
                 assertion_eng = AssertionEngine()
                 artifacts_map = {}
+                max_bytes = 500 * 1024
                 for art_rel in artifact_files:
                     art_full = workspace_dir / art_rel
+                    suffix = art_full.suffix.lower()
                     try:
-                        if art_full.stat().st_size <= 500 * 1024:
-                            artifacts_map[art_rel] = art_full.read_text(
-                                encoding="utf-8", errors="replace"
-                            )
+                        is_binary = suffix in BINARY_EXTENSIONS and suffix not in TEXT_EXTENSIONS
+                        if is_binary:
+                            with art_full.open("rb") as f_bin:
+                                artifacts_map[art_rel] = f_bin.read(max_bytes)
+                        else:
+                            with art_full.open("r", encoding="utf-8", errors="replace") as f_txt:
+                                artifacts_map[art_rel] = f_txt.read(max_bytes)
                     except Exception:
-                        pass
+                        artifacts_map.setdefault(art_rel, "" if suffix not in BINARY_EXTENSIONS else b"")
                 suite_res = assertion_eng.evaluate_suite(
                     assertions_config,
                     output_text=stdout_text,
                     artifacts=artifacts_map,
-                    context={"stdout": stdout_text, "model": plan_item["model"]},
+                    context={
+                        "stdout": stdout_text,
+                        "model": plan_item["model"],
+                        "workspace_dir": str(workspace_dir),
+                    },
                 )
                 # script 契约宿主把模型最终回答放在 text 字段（已追加进 transcript 落盘），
                 # 但不写入 stdout.txt；对这类宿主，若 stdout 无完成信号，用 transcript 补充判定视野
@@ -2074,6 +2083,7 @@ def run_from_plan(
                             context={
                                 "stdout": stdout_text,
                                 "model": plan_item["model"],
+                                "workspace_dir": str(workspace_dir),
                             },
                         )
                         if retry_suite.passed or retry_suite.score > suite_res.score:
