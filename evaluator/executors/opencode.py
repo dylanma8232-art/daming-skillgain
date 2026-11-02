@@ -413,6 +413,7 @@ class OpencodeExecutor(BaseExecutor):
             format_json=format_json,
             dangerous_skip_permissions=dangerous_skip_permissions,
             attach=execution_mode == "cli-attach",
+            cli_path=self.cli_path,
         )
         transcript_text, _, usage_info = parse_opencode_json_events(stdout_text)
         return SessionResult(
@@ -428,7 +429,7 @@ class OpencodeExecutor(BaseExecutor):
 
     def list_models(self) -> list[str]:
         """列出可用模型（opencode 域内发现逻辑）"""
-        return get_opencode_models()
+        return get_opencode_models(cli_path=self.cli_path)
 
     def validate_config(self) -> tuple[bool, str]:
         """验证配置"""
@@ -464,12 +465,11 @@ class OpencodeExecutor(BaseExecutor):
         return env
 
 
-def get_opencode_models() -> list[str]:
+def get_opencode_models(cli_path: str | None = None) -> list[str]:
     """opencode 域内模型发现（GUI 配置 -> CLI -> 配置文件）"""
     import subprocess
     import json as _json
-    import os
-    cli = _resolve_opencode_cli_path()
+    cli = cli_path or _resolve_opencode_cli_path()
     gui_config_paths = [
         Path.home() / "Library" / "Application Support" / "ai.opencode.desktop" / "opencode.global.dat",
     ]

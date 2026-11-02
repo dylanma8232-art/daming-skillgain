@@ -45,7 +45,11 @@ class ScriptExecutor(BaseExecutor):
 
     def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
-        self.script = self.config.get("script", "")
+        script_val = self.config.get("script", "")
+        if script_val:
+            self.script = str(Path(script_val).expanduser().resolve())
+        else:
+            self.script = ""
         caps = self.config.get("capabilities")
         if isinstance(caps, dict):
             self.capabilities = dict(caps)
@@ -55,7 +59,7 @@ class ScriptExecutor(BaseExecutor):
         script = self.script
         if not script:
             raise ValueError("script 执行器缺少配置: script")
-        script_path = Path(script).expanduser()
+        script_path = Path(script).expanduser().resolve()
         if not script_path.exists():
             raise FileNotFoundError(f"宿主脚本不存在: {script_path}")
         proc = subprocess.run(
@@ -139,7 +143,7 @@ class ScriptExecutor(BaseExecutor):
     def validate_config(self) -> tuple[bool, str]:
         if not self.script:
             return False, "script 执行器缺少配置: script"
-        script_path = Path(self.script).expanduser()
+        script_path = Path(self.script).expanduser().resolve()
         if not script_path.exists():
             return False, f"宿主脚本不存在: {script_path}"
         if not os.access(str(script_path), os.X_OK):
