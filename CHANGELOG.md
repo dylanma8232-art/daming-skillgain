@@ -129,3 +129,11 @@
 - requirements.txt
 - tests/test_api_server.py
 - tests/test_api_server_startup.py
+
+## 2026-11-02 03:39 迭代
+
+- **PR**：61 Fix result files process detection and support code extensions
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/61
+- **改动文件**：
+- evaluator/result_files.py
+- tests/test_result_files.py
