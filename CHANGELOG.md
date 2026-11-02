@@ -153,3 +153,12 @@
 - evaluator/executors/opencode.py
 - evaluator/executors/script.py
 - tests/test_executor_cli_and_script_path.py
+
+## 2026-11-02 03:44 迭代
+
+- **PR**：64 Fix engine artifact metadata omission and XLSX binary corruption
+- **链接**：https://github.com/dylanma8232-art/daming-skillgain/pull/64
+- **改动文件**：
+- evaluator/assertions/script_eval.py
+- evaluator/engine.py
+- tests/test_engine_artifacts.py
