@@ -9,6 +9,9 @@ from typing import Any
 
 from dataclasses import asdict, dataclass
 
+from . import __version__
+from .demo import DEFAULT_DEMO_OUTPUT, generate_demo_report
+from .doctor import run_doctor
 from .engine import (
     EvaluationEngine,
     run_from_plan,
@@ -31,9 +34,41 @@ from .task_generator import generate_task_prompt
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="daming-skillgain v1.0 - Skill 评测 CLI（想快速上手，请用 simple 子命令）"
+        prog="skillgain",
+        description=f"daming-skillgain v{__version__} - Skill 发布前质检门禁 CLI（新手推荐: skillgain demo / skillgain simple）",
+    )
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"daming-skillgain {__version__}",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # ---- 零配置离线体验：demo ----
+    demo_parser = subparsers.add_parser(
+        "demo",
+        help="【零配置体验】无需 API Key，1 秒生成交互式离线示例报告",
+        description="离线生成一份覆盖「明确有效 / 负迁移 / 测不出来」三种结论的自包含 HTML 报告，方便快速体验。",
+    )
+    demo_parser.add_argument(
+        "-o",
+        "--output",
+        default=DEFAULT_DEMO_OUTPUT,
+        help=f"输出 HTML 报告路径（默认: {DEFAULT_DEMO_OUTPUT}）",
+    )
+    demo_parser.add_argument(
+        "--open",
+        action="store_true",
+        help="生成后自动用系统默认浏览器打开报告",
+    )
+
+    # ---- 一键环境体检：doctor ----
+    subparsers.add_parser(
+        "doctor",
+        help="【环境体检】检查 Python、依赖、本机 AI 工具与 API Key 就绪状态",
+        description="检查本机可用的 AI 宿主（OpenCode / Claude Code / Codex / Cursor Agent）、依赖包与环境变量，给出下一步建议。",
+    )
 
     # ---- 新手入口：simple 问答式引导（推荐） ----
     simple_parser = subparsers.add_parser(
@@ -1298,6 +1333,19 @@ def main() -> None:
     configure_logging()
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.command == "demo":
+        result = generate_demo_report(
+            output_path=args.output,
+            open_browser=bool(getattr(args, "open", False)),
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "doctor":
+        result = run_doctor()
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(0 if result.get("success") else 1)
 
     if args.command == "update-check":
         from .update_checker import maybe_check_update

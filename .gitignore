@@ -4,4 +4,8 @@ __pycache__/
 .pytest_cache/
 runs/
 _generated_test_data/
+*.egg-info/
+build/
+dist/
+skillgain-demo-report.html
 .DS_Store

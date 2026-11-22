@@ -1,0 +1,16 @@
+{
+  "skill_path": "./examples/sample-skill",
+  "skill_name": "release-notes-writer",
+  "task_prompt": "根据本周 5 条提交记录（feat: 新增 demo 与 doctor 命令；fix: 修复版本检查误判；docs: 重写双语 README），写一份面向外部开发者的 v2.1.0 发布说明并保存为 RELEASE_NOTES.md，要求按新特性/问题修复/破坏性变更分组，给出升级命令，禁止编造未提及内容。",
+  "models": [
+    "claude-sonnet-4",
+    "gpt-4.1-mini"
+  ],
+  "voting_models": [
+    "claude-sonnet-4"
+  ],
+  "summary_model": "claude-sonnet-4",
+  "host": "opencode",
+  "repetitions": 3,
+  "auto": true
+}

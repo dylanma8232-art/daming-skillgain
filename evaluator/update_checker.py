@@ -38,7 +38,7 @@ DEFAULT_TIMEOUT_SECONDS = 3.0
 CHECK_INTERVAL_SECONDS = 24 * 3600
 
 # 对外宣传版本（README 徽章 / 用户提示口径）。
-PUBLIC_VERSION = "1.0"
+PUBLIC_VERSION = "2.1.0"
 
 # 缓存位置。
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "daming-skillgain"
@@ -134,8 +134,15 @@ def fetch_latest_release(timeout: float = DEFAULT_TIMEOUT_SECONDS) -> dict | Non
     return {"version": tag, "url": html_url}
 
 
+_PLACEHOLDER_REPOS = frozenset({
+    "owner/repo",
+    "your-org/daming-skillgain",
+    "placeholder/repo",
+})
+
+
 def _is_placeholder_repo() -> bool:
-    return _repo_slug() == "dylanma8232-art/daming-skillgain"
+    return _repo_slug().lower() in _PLACEHOLDER_REPOS
 
 
 # ---- 检查与提示 ----------------------------------------------------------------

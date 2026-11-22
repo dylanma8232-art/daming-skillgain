@@ -4,6 +4,25 @@
 
 ---
 
+## [2026-11-22] v2.1.0 零配置体验、标准打包与开源门面升级
+
+- **版本**：v2.1.0
+- **核心新增与改进**：
+  1. **现代 Python 打包与全局 CLI 命令（`pyproject.toml`）**：
+     - 支持 `pip install git+https://github.com/dylanma8232-art/daming-skillgain.git` 与 `pip install -e .` 一键安装；
+     - 新增全局命令 `skillgain` 与 `daming-skillgain`，支持 `-V / --version`；
+     - 拆分轻量核心依赖与可选扩展组（`[api]`、`[mcp]`、`[anthropic]`、`[dev]`、`[all]`）。
+  2. **零配置离线体验与环境体检**：
+     - 新增 `skillgain demo [--open]`（`evaluator/demo.py`）：无需 API Key，1 秒生成覆盖「明确有效 / 负迁移警报 / 测不出来」三种结论的自包含 HTML 示例报告；
+     - 新增 `skillgain doctor`（`evaluator/doctor.py`）：一键体检 Python、依赖包、本机可用 AI 工具（OpenCode / Claude Code / Codex / Cursor Agent）与 API Key 配置状态（绝不泄露密钥明文）。
+  3. **修复版本自检与版本号统一**：
+     - 修复 `evaluator/update_checker.py` 中 `_is_placeholder_repo()` 把正式仓库误判为占位符导致更新检查失效的 Bug；
+     - 统一 `evaluator/__init__.py`、`update_checker.py`、`cli.py`、`SKILL.md` 与 `pyproject.toml` 版本口径为 `2.1.0`。
+  4. **示例集、文档与开源协作规范**：
+     - 新增 `examples/`（示例 Skill、配置模板、万能脚本适配器模板）；
+     - 全面升级中英双语 `README.md` / `README_EN.md`（徽章、30 秒上手、对比表、Mermaid 流程图、宿主矩阵）；
+     - 新增 `CONTRIBUTING.md`、GitHub Issue/PR 模板，升级 CI 为 Python 3.10–3.12 矩阵 + CLI 烟雾测试。
+
 ## [2026-10-30] v2.0.0 通用桌面 Agent 适配与极简报告重构里程碑
 
 - **版本**：v2.0.0（通用 Agent 适配、流程强化与大白话报告全闭环）
