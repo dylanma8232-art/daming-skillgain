@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package Skill ZIP
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PKG_DIR="daming-skillgain"
+          mkdir -p "${PKG_DIR}"
+          cp -r SKILL.md README.md README_EN.md CHANGELOG.md LICENSE pyproject.toml requirements.txt evaluator references examples "${PKG_DIR}/"
+          find "${PKG_DIR}" -name "__pycache__" -type d -exec rm -rf {} +
+          zip -r "daming-skillgain-${TAG}.zip" "${PKG_DIR}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "${TAG}" "daming-skillgain-${TAG}.zip" \
+            --title "${TAG}" \
+            --generate-notes
