@@ -40,6 +40,10 @@ jobs:
           ' CHANGELOG.md > release-notes.md
           NOTES=(--generate-notes)
           if [ -s release-notes.md ]; then NOTES=(--notes-file release-notes.md); fi
-          gh release create "${TAG}" "daming-skillgain-${TAG}.zip" \
-            --title "${TAG}" \
-            "${NOTES[@]}"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "daming-skillgain-${TAG}.zip" --clobber
+          else
+            gh release create "${TAG}" "daming-skillgain-${TAG}.zip" \
+              --title "${TAG}" \
+              "${NOTES[@]}"
+          fi
