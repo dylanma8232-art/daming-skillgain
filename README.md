@@ -98,20 +98,7 @@ skillgain pipeline --profile examples/eval-config.example.json
 
 ## 报告长什么样
 
-<table>
-<tr>
-<td width="50%" valign="top">
-  <img src="assets/report-screenshot.png" alt="skillgain demo 生成的真实 HTML 报告首屏：通俗总结裁决与负迁移模型标红预警" width="100%">
-  <br>
-  <sub><b>首屏结论与负迁移预警（真实报告直截）</b>：一眼看清有效/有害/没结论模型分布，自动标红开启后表现倒退的模型</sub>
-</td>
-<td width="50%" valign="top">
-  <img src="assets/report-details.png" alt="skillgain demo 生成的真实 HTML 报告明细：零 LLM 自动检查清单与带/不带 Skill 票数对比" width="100%">
-  <br>
-  <sub><b>自动规则检查与配对盲评明细</b>：逐条列出零 LLM 确定性断言通过/失败原因，并展示各模型带与不带 Skill 的得票对照</sub>
-</td>
-</tr>
-</table>
+![skillgain demo 生成的真实 HTML 报告首屏：通俗总结裁决与负迁移模型标红预警](assets/report-screenshot.png)
 
 - **首屏直给通俗裁决**：拒绝晦涩统计术语，首屏直接展示一句话结论、有效/有害模型分布、负迁移红色预警框与下一步操作建议。
 - **客观断言 + 盲评双轨存证**：逐条展示零 LLM 自动规则检查通过率（如文件是否生成、结构/表格/预算是否合规），并附上匿名盲评票数与理由。
