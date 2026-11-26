@@ -230,7 +230,7 @@ def build_demo_payload() -> dict[str, Any]:
                 },
                 {
                     "model": "gpt-4.1-mini",
-                    "verdict": "skill_harmful",
+                    "verdict": "negative_migration",
                     "negative_migration": True,
                     "n_paired": 3,
                     "mean_delta": -1.0,
@@ -316,7 +316,7 @@ def generate_demo_report(
         "opened_in_browser": opened,
         "models_demonstrated": {
             "claude-sonnet-4": "skill_effective",
-            "gpt-4.1-mini": "skill_harmful",
+            "gpt-4.1-mini": "negative_migration",
             "deepseek-v3": "inconclusive",
         },
         "next_step": f"在浏览器中打开 {target} 查看交互式自包含报告；准备好自己的 Skill 后运行 `skillgain simple` 开始真实测评。",

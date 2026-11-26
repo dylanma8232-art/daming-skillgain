@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daming-skillgain"
-version = "2.1.0"
+version = "2.1.1"
 description = "Pre-release quality gate for AI Agent Skills — paired with/without evaluation, deterministic assertions, blind judge review, and self-contained HTML reports."
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
@@ -47,7 +47,7 @@ api = [
     "uvicorn>=0.24.0",
 ]
 mcp = [
-    "mcp>=1.0.0",
+    "mcp>=1.30,<2",
 ]
 anthropic = [
     "anthropic>=0.18.0",
@@ -59,7 +59,7 @@ dev = [
 all = [
     "fastapi>=0.104.0",
     "uvicorn>=0.24.0",
-    "mcp>=1.0.0",
+    "mcp>=1.30,<2",
     "anthropic>=0.18.0",
 ]
 

@@ -14,11 +14,16 @@ A9：从「三个大工具」拆为按阶段可组合的工具，统一透出 ho
 from __future__ import annotations
 import asyncio
 import json
+import sys
+from contextlib import redirect_stdout
+from io import TextIOWrapper
 from pathlib import Path
 from typing import Any
 
 try:
-    from mcp import Server, Tool
+    from anyio import wrap_file
+    from mcp.server.fastmcp import FastMCP
+    from mcp.server.stdio import stdio_server
     from mcp.types import TextContent
     HAS_MCP = True
 except ImportError:
@@ -186,7 +191,7 @@ def _do_pipeline(profile=None, **kwargs) -> dict:
 
 
 if HAS_MCP:
-    server = Server("daming-skillgain")
+    server = FastMCP("daming-skillgain")
 
     @server.tool("hosts")
     async def hosts() -> list[TextContent]:
@@ -374,9 +379,21 @@ if HAS_MCP:
             return _error(e)
 
 
+async def _run_stdio():
+    protocol_stdout = wrap_file(TextIOWrapper(sys.stdout.buffer, encoding="utf-8"))
+    with redirect_stdout(sys.stderr):
+        async with stdio_server(stdout=protocol_stdout) as (reader, writer):
+            protocol = server._mcp_server
+            await protocol.run(reader, writer, protocol.create_initialization_options())
+
+
 def run_mcp_server():
     """启动 MCP Server"""
     if not HAS_MCP:
         raise ImportError("需要安装 mcp: pip install mcp")
 
-    asyncio.run(server.run())
+    asyncio.run(_run_stdio())
+
+
+if __name__ == "__main__":
+    run_mcp_server()

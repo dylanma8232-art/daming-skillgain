@@ -100,7 +100,7 @@ def render_report_html(payload: dict[str, Any]) -> str:
     neg_alert_block = (
         f"<section class='section' style='border:2px solid #dc2626;'>"
         f"<div class='section-head'><h2>⚠️ 这些模型上带 skill 反而更差</h2>"
-        f"<span class='section-note'>建议在这些模型上关闭</span></div>{p1_alerts_html}</section>"
+        f"</div>{p1_alerts_html}</section>"
         if p1_alerts_html else ""
     )
 
@@ -119,18 +119,18 @@ def render_report_html(payload: dict[str, Any]) -> str:
 {_render_first_screen_hero(first, payload)}
 <section class='section'>{_render_first_screen_kpis(first)}{host_line}</section>
 {neg_alert_block}
-<section class='section'><div class='section-head'><h2>✅❌ 自动检查结果（逐条）</h2><span class='section-note'>绿色=通过，红色=没通过；每条都说人话原因</span></div>{_render_case_checklist(first)}</section>
-<section class='section'><div class='section-head'><h2>带 Skill vs 不带 Skill</h2><span class='section-note'>每个模型一张卡：评委票数 + 一句人话结论</span></div>{_render_compare_cards(first)}</section>
+<section class='section'><div class='section-head'><h2>自动检查结果</h2></div>{_render_case_checklist(first)}</section>
+<section class='section'><div class='section-head'><h2>带 Skill vs 不带 Skill</h2></div>{_render_compare_cards(first)}</section>
 <details class='tech-section'><summary>按模型看完整结果（评委评价、交付物对照、诊断）</summary><div class='tech-section-body'>
 <section class='section'>{model_result_html}</section>
 </div></details>
-<details class='tech-section'><summary>配对明细与统计口径（点开看完整数据）</summary><div class='tech-section-body'>
+<details class='tech-section'><summary>逐轮结果与统计口径</summary><div class='tech-section-body'>
 <section class='section'><div class='section-head'><h2>配对明细与评委打分一致性</h2><span class='section-note'>每对任务 × 每轮投票的差值、评委看法一致的比例与需要人工复核的记录</span></div>{p1_details_html}</section>
 <section class='section'><div class='section-head'><h2>统计口径明细（复核用）</h2><span class='section-note'>对比了几组、平均差值、波动大小等，仅作复核</span></div>{stats_html}</section>
 </div></details>
 <details class='tech-section'><summary>附录（自动检查规则存档 / 证据链）</summary><div class='tech-section-body'>
 <section class='section'><div class='section-head'><h2>自动检查规则存档</h2><span class='section-note'>同一份产出重查多少遍结果都一样，可复验</span></div>{snapshot_html}</section>
-<section class='section'><div class='section-head'><h2>证据链与可信度</h2><span class='section-note'>透明化的底层记录，确保每项判断均可追溯</span></div><div class='evidence-grid'><div class='evidence'><strong>跑前体检记录</strong><span>开跑前确认输入文件与环境就绪，记录保存在 run 目录中。</span></div><div class='evidence'><strong>空产出自动过滤</strong><span>评委打分阶段会跳过没交出东西的实验。</span></div><div class='evidence'><strong>评委原始输出</strong><span>投票依据保存在 blind_vote/evaluations.json。</span></div><div class='evidence'><strong>实验全流程追溯</strong><span>包括 stdout、stderr、transcript 及全量 artifacts。</span></div></div></section>
+<section class='section'><div class='section-head'><h2>去哪里核对原始记录</h2></div><div class='evidence-grid'><div class='evidence'><strong>跑前体检记录</strong><span>开跑前确认输入文件与环境就绪，记录保存在 run 目录中。</span></div><div class='evidence'><strong>空产出自动过滤</strong><span>评委打分阶段会跳过没交出东西的实验。</span></div><div class='evidence'><strong>评委原始输出</strong><span>投票依据保存在 blind_vote/evaluations.json。</span></div><div class='evidence'><strong>实验全流程追溯</strong><span>包括 stdout、stderr、transcript 及全量 artifacts。</span></div></div></section>
 </div></details>
 </main><script>{_report_js()}</script></body></html>"""
 
@@ -312,7 +312,7 @@ def generate_anonymous_report(run_dir: Path, output_path: Path | None = None) ->
 <title>匿名评测报告 - {html.escape(str(manifest.get('evaluation_name', '')))}</title>
 <style>{css}</style></head>
 <body><main class='page'>
-<header class='hero'><h1>方案矩阵</h1><p>请围绕着需求选择你觉得不错的方案吧</p></header>
+<header class='hero'><h1>匿名方案对照</h1><p>读完任务，再看看各方案实际交了什么。你会选哪一份？</p></header>
 <div class='task-box'><strong>评测任务：</strong>{html.escape(task_prompt)}</div>
 <div class='scheme-list'>{''.join(scheme_cards_html)}</div>
 </main></body></html>"""

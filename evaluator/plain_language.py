@@ -33,10 +33,6 @@ def contains_untranslated_jargon(text: str) -> list[str]:
     return [term for term in JARGON_TERMS if term.lower() in lowered]
 
 
-def _metric_word(primary_metric: str) -> str:
-    return "评委票数" if primary_metric == "blind_vote" else "任务得分"
-
-
 def verdict_to_plain_language(
     verdict: str,
     *,
@@ -55,33 +51,21 @@ def verdict_to_plain_language(
     - inconclusive → 「两者差距不大/波动太大，这次没测出明显区别」+ 下一步建议
     输出中不允许出现 JARGON_TERMS 里的任何术语。
     """
-    metric_word = _metric_word(primary_metric)
-
-    if verdict == "skill_effective":
-        text = "带这个 skill 的产出明显更好，建议开启。"
+    if verdict in ("skill_effective", "negative_migration"):
+        text = ("带这个 skill 的产出明显更好，建议开启。" if verdict == "skill_effective"
+                else "带这个 skill 反而更差，建议在这个模型上关闭。")
         if n > 0 and abs(mean_delta) > 0:
-            text += f" {n} 轮同样的任务里，带 skill 平均{_metric_verb(primary_metric)}高 {abs(mean_delta):.1f}。"
-        return text
-
-    if verdict == "negative_migration":
-        text = "带这个 skill 反而更差，建议在这个模型上关闭。"
-        if n > 0 and abs(mean_delta) > 0:
-            text += f" {n} 轮同样的任务里，带 skill 平均{_metric_verb(primary_metric)}低 {abs(mean_delta):.1f}。"
+            direction = "多" if mean_delta > 0 else "少"
+            unit = "票" if primary_metric == "blind_vote" else "分"
+            text += f"同一个任务对比了 {n} 轮，开启后平均{direction}得 {abs(mean_delta):.1f} {unit}。"
         return text
 
     # inconclusive（含未知 verdict，一律按没测出区别处理）
-    text = "两者差距不大、或结果波动太大，这次没测出明显区别。"
-    if n > 0 and n < 5:
-        text += f"而且只对比了 {n} 轮，轮数偏少。"
-    text += (
-        "想进一步确认，可以：增加重复次数多跑几轮、换一个更难的任务再测，"
-        "或者看看下面评委对两边产出的具体评价。"
-    )
-    return text
-
-
-def _metric_verb(primary_metric: str) -> str:
-    return "多拿" if primary_metric == "blind_vote" else "多得"
+    if n == 0:
+        return "这次没有能配成对的结果，还看不出开启 Skill 有没有帮助。"
+    if n < 5:
+        return f"只对比了 {n} 轮，还看不出哪边更好。可以用同一个任务再跑几轮。"
+    return f"同一个任务对比了 {n} 轮，仍没看出哪边稳定占优。可以对照两边的交付物，也可以换个更难的任务再测。"
 
 
 def votes_to_plain_language(
@@ -128,41 +112,33 @@ def build_plain_summary(
     total_with = sum(int(g.get("with_votes", 0) or 0) for g in groups)
     total_without = sum(int(g.get("without_votes", 0) or 0) for g in groups)
 
-    sentence1 = (
-        f"这次评测让 {model_count} 个模型分别「带 skill」和「不带 skill」各自完成同一个任务，"
-        "再由评委打分。"
-    )
+    sentence1 = f"这次用同一个任务，在 {model_count} 个模型上比较了开启和关闭 Skill 的结果。"
 
     effective = sum(1 for pg in pair_gains if pg.get("verdict") == "skill_effective")
     harmful = sum(1 for pg in pair_gains if pg.get("verdict") == "negative_migration")
     unclear = model_count - effective - harmful
 
     if effective and not harmful:
-        sentence2 = (
-            f"结论：{effective} 个模型带 skill 的产出明显更好，可以放心开启；"
-            + (f"另外 {unclear} 个模型没测出明显区别。" if unclear else "")
-        ).rstrip()
+        sentence2 = f"其中 {effective} 个模型开启后表现更好。"
     elif harmful and not effective:
-        sentence2 = (
-            f"结论：{harmful} 个模型带 skill 反而更差，建议在这些模型上关闭；"
-            + (f"另外 {unclear} 个模型没测出明显区别。" if unclear else "")
-        ).rstrip()
+        sentence2 = f"有 {harmful} 个模型开启后表现更差，建议在这些模型上关闭。"
     elif effective and harmful:
         sentence2 = (
-            f"结论：{effective} 个模型带 skill 明显更好，{harmful} 个模型反而更差，"
-            "这个 skill 的效果因模型而异，按模型分别决定开不开。"
+            f"开启后，{effective} 个模型表现更好，{harmful} 个反而变差。"
         )
     else:
-        sentence2 = "结论：这次没测出明显区别——各模型两种模式的差距都很小，或波动太大，还不能下结论。"
+        sentence2 = "现有结果还看不出哪个模型能从这个 Skill 中受益。"
+    if unclear and (effective or harmful):
+        sentence2 += f"还有 {unclear} 个模型看不出明显差别。"
 
     if total_with + total_without > 0:
         if total_with > total_without:
-            sentence3 = f"评委投票整体也偏向带 skill（{total_with} 比 {total_without}）。"
+            sentence3 = f"评委给开启的一侧投了 {total_with} 票，关闭的一侧 {total_without} 票。"
         elif total_without > total_with:
             sentence3 = f"评委投票整体偏向不带 skill（{total_without} 比 {total_with}）。"
         else:
             sentence3 = f"评委投票两边打平（各 {total_with} 票）。"
     else:
-        sentence3 = "评委这次没有留下有效投票，结论以自动任务得分为准。"
+        sentence3 = "这次没有有效的评委投票。"
 
     return " ".join(part for part in (sentence1, sentence2, sentence3) if part)

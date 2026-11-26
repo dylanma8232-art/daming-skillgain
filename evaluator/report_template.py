@@ -755,7 +755,7 @@ def _render_model_result_sections(payload: dict[str, Any]) -> str:
                 ci_high=float(pg.get("ci_high", 0.0)),
                 primary_metric=str(pg.get("primary_metric") or "assertion"),
             )
-            plain_html = f"<div class='plain-note'>💡 解读：{html.escape(plain)}</div>"
+            plain_html = f"<div class='plain-note'>{html.escape(plain)}</div>"
 
         # 技术细节：统计口径（平均分差 / 波动范围 / 轮次）+ 判定依据
         tech_bits: list[str] = []
@@ -856,9 +856,9 @@ def _render_p1_negative_alerts(p1: dict[str, Any] | None) -> str:
         )
         alerts.append(f"""
         <div style='background:#fef2f2;border:2px solid #dc2626;border-radius:10px;padding:16px;margin-bottom:12px;'>
-          <strong style='color:#dc2626;font-size:15px;'>🚨 负迁移警报：{model}</strong>
-          <p style='margin:8px 0 0;font-size:14px;'><strong>建议在该模型上关闭此 skill。</strong></p>
-          <div class='plain-note'>💡 解读：{html.escape(plain)}</div>
+          <strong style='color:#dc2626;font-size:15px;'>{model}</strong>
+
+          <div class='plain-note'>{html.escape(plain)}</div>
           <details class='tech-details'><summary>技术细节</summary><div class='tech-details-body'>{html.escape('；'.join(pg.get('reasons', [])))}</div></details>
         </div>""")
     return "".join(alerts)
@@ -947,7 +947,7 @@ def _render_statistics_section(stats: dict[str, Any] | None) -> str:
       {warning_html}
       <div class='kpi-grid'>
         <div class='kpi'><span>对比了几组</span><strong>{n_valid} 组</strong><p>共 {n_total} 组实验，其中 {invalid_cnt} 次因基础设施故障没算进来</p></div>
-        <div class='kpi good'><span>平均差值</span><strong>{mean_d:+.2f} 票</strong><p>带 skill 比不带 skill 平均多/少拿多少票</p></div>
+        <div class='kpi good'><span>平均差值</span><strong>{mean_d:+.2f} 票</strong><p>正数表示开启后得票更多，负数表示更少。</p></div>
         <div class='kpi blue'><span>波动大小</span><strong>{sd:.2f}</strong><p>数值越小，说明结果越稳定</p></div>
         <div class='kpi warn'><span>成对胜负分布</span><strong>{w_wins} 胜 / {wo_wins} 负 / {ties} 平</strong><p>带 Skill 相对不带 Skill 的单模型对比结果</p></div>
       </div>

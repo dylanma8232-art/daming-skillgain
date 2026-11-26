@@ -42,7 +42,7 @@ def test_demo_report_covers_three_verdicts_and_is_self_contained(tmp_path: Path)
 def test_demo_payload_structure():
     payload = build_demo_payload()
     verdicts = {g["verdict"] for g in payload["p1"]["pair_gains"]}
-    assert verdicts == {"skill_effective", "skill_harmful", "inconclusive"}
+    assert verdicts == {"skill_effective", "negative_migration", "inconclusive"}
 
 
 def test_doctor_does_not_leak_secret_values(monkeypatch):

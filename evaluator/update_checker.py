@@ -38,7 +38,7 @@ DEFAULT_TIMEOUT_SECONDS = 3.0
 CHECK_INTERVAL_SECONDS = 24 * 3600
 
 # 对外宣传版本（README 徽章 / 用户提示口径）。
-PUBLIC_VERSION = "2.1.0"
+PUBLIC_VERSION = "2.1.1"
 
 # 缓存位置。
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "daming-skillgain"

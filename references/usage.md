@@ -62,10 +62,11 @@ curl -X POST http://localhost:8000/api/evaluate \
 ## MCP Server
 
 ```bash
-python3 -m evaluator.mcp_server
+python -m pip install ".[mcp]"
+python -m evaluator.mcp_server
 ```
 
-任何支持 MCP 的 agent 都能调用。
+使用 Python 3.10 或更新版本。配置 MCP 客户端的 stdio 服务时，启动命令填安装了扩展的 Python 解释器路径，参数填 `-m` 和 `evaluator.mcp_server`。连接后可先调用 `analyze_skill`，传入示例 Skill 的绝对路径。正式测评还需要在服务所在机器上配置实验执行工具。
 
 ## 配置文件
 

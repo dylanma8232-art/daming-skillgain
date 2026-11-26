@@ -702,8 +702,8 @@ def _load_p1_payload(run_dir: Path) -> dict[str, Any] | None:
 # R2/R4/R5: 首屏 payload（纯数据，结论先行）
 # ==========================================================================
 _VERDICT_LABELS = {
-    "skill_effective": ("明确有效", "带这个 skill 明显更好，建议开启"),
-    "negative_migration": ("明确有害", "带这个 skill 反而更差，建议关闭"),
+    "skill_effective": ("明确有效", "有模型在这项任务上受益于 Skill"),
+    "negative_migration": ("明确有害", "有模型开启后表现更差，建议在这些模型上关闭"),
     "inconclusive": ("没法下结论", "这次没测出明显区别"),
 }
 

@@ -20,6 +20,8 @@ jobs:
           PKG_DIR="daming-skillgain"
           mkdir -p "${PKG_DIR}"
           cp -r SKILL.md README.md README_EN.md CHANGELOG.md LICENSE pyproject.toml requirements.txt evaluator references examples "${PKG_DIR}/"
+          mkdir -p "${PKG_DIR}/assets"
+          cp assets/banner-dark.png assets/banner-light.png assets/report-screenshot.png "${PKG_DIR}/assets/"
           find "${PKG_DIR}" -name "__pycache__" -type d -exec rm -rf {} +
           zip -r "daming-skillgain-${TAG}.zip" "${PKG_DIR}"
 
@@ -28,6 +30,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF_NAME}"
+          awk -v tag="${TAG}" '
+            /^## / {
+              if (found) exit
+              for (i = 1; i <= NF; i++) if ($ i == tag) found = 1
+              next
+            }
+            found && $0 != "---" { print }
+          ' CHANGELOG.md > release-notes.md
+          NOTES=(--generate-notes)
+          if [ -s release-notes.md ]; then NOTES=(--notes-file release-notes.md); fi
           gh release create "${TAG}" "daming-skillgain-${TAG}.zip" \
             --title "${TAG}" \
-            --generate-notes
+            "${NOTES[@]}"

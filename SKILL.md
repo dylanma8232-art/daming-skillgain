@@ -5,7 +5,7 @@ license: GPL-3.0
 metadata:
   audience: developers
   workflow: evaluation
-  version: "2.1.0"
+  version: "2.1.1"
   main_metric: Skill Gain Δ (paired, same-model)
   compatibility: 跨宿主（经 Subject Adapter 统一契约；报告标注本次已测宿主，结论仅适用于已测宿主）
 ---
@@ -22,18 +22,19 @@ Skill 发布前的质检门禁：把 skill 放进真实任务，与不启用时�
 - 对 skill 做版本回归：改版前后各跑一次同口径评测
 - 发布 skill 前，需要一份可信、可复核的评测报告
 
-## 最短路径（推荐）
+## 由 Agent 调用
 
 ```bash
-pip install -e .
-skillgain demo      # 0 配置 1 秒生成离线示例报告
-skillgain doctor    # 检查本机可用 AI 工具与依赖
-skillgain simple    # 问答式引导，只答 4 个问题自动跑完评测
+python3.12 -m venv .venv
+.venv/bin/python -m pip install .
+.venv/bin/python -m evaluator.cli demo --output skillgain-demo-report.html
 ```
 
-（也可直接运行 `python3 -m evaluator.cli simple`）
+在包含本文件和 `pyproject.toml` 的 Skill 目录运行上面的命令。Python 3.12 是示例，可以换成机器上实际可用的 Python 3.10 或更新版本。Windows 用 `py -3.12 -m venv .venv`，随后用 `.venv/Scripts/python.exe`。已有可用的 `skillgain` 命令时，直接运行即可。
 
-问答式引导，只答 4 个问题自动跑完评测，完成后打开生成的 `report.html`。
+- 用户想先看效果，运行 `demo`，把生成的 HTML 路径交给用户。这一步不需要模型账号。
+- 用户要测另一个 Skill，先确认其目录、任务和输入。用同一个解释器运行 `-m evaluator.cli doctor`，检查负责执行实验的工具。当前聊天的 Agent 负责协调，可以选择另一个工具执行两组实验。
+- Agent 应在对话里收集参数，再从用户项目目录运行 `-m evaluator.cli pipeline --profile <配置文件> --non-interactive`。使用配置和被测 Skill 的绝对路径，避免依赖客户端的当前目录。交付返回的 `report_path`，并说明实际测了哪些模型。
 
 高级分步（`plan` → `run` → `evaluate` → `report`、参数细节、准备阶段硬规则）见 [references/workflow.md](references/workflow.md)。
 
