@@ -96,7 +96,20 @@ skillgain pipeline --profile examples/eval-config.example.json
 
 ## What the Report Looks Like
 
-![Actual report screenshot: plain-language summary verdict, negative-transfer warning, deterministic rule checklist, and side-by-side deliverables](assets/report-screenshot.png)
+<table>
+<tr>
+<td width="50%" valign="top">
+  <img src="assets/report-screenshot.png" alt="Actual report top section: plain-language summary verdict and negative-transfer warning" width="100%">
+  <br>
+  <sub><b>Top-of-Report Verdict & Negative-Transfer Alert</b>: Direct screenshot from <code>skillgain demo</code> showing per-model outcomes and red alerts where enabling the Skill hurts performance</sub>
+</td>
+<td width="50%" valign="top">
+  <img src="assets/report-details.png" alt="Actual report details: deterministic rule checklist and per-model paired vote breakdown" width="100%">
+  <br>
+  <sub><b>Deterministic Rule Checks & Paired Blind Votes</b>: Zero-LLM pass/fail assertions alongside per-model with-Skill vs. without-Skill blind review scores</sub>
+</td>
+</tr>
+</table>
 
 - **Decision-first summary**: Plain-language headline, per-model breakdown, and high-visibility red alerts for models suffering negative transfer.
 - **Deterministic checks + blind review**: Zero-LLM rule pass/fail checklists paired with anonymized judge votes and preserved rationales.
