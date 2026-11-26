@@ -1,8 +1,8 @@
 <div align="center">
 
-# daming-skillgain
+# 大明 Skill 评测器 (`daming-skillgain`)
 
-**AI Agent Skill 发布前的自动化质检门禁 —— 用配对对照、确定性断言与匿名盲评取代主观感觉**
+**专门用来评测 Skill 的 Skill —— 跑一次真题前后对比，看清你的 Skill 在各模型上是真帮忙还是帮倒忙**
 
 <p>
   <a href="README.md"><img alt="简体中文" src="https://img.shields.io/badge/语言-简体中文-c8521b?style=flat-square"></a>
