@@ -162,15 +162,9 @@ flowchart LR
 
 ---
 
-## 大明造物 · 系列开源作品
+## 关于作者
 
-由产品经理 **[Dylan.ma](https://github.com/dylanma8232-art)** 与橘猫 **大明（Daming）** 共同出品的工具矩阵：
-
-| 项目 | 定位 | 一句话说明 |
-|---|---|---|
-| **[daming-skillgain](https://github.com/dylanma8232-art/daming-skillgain)** | Skill 质检门禁 | 同模型配对对照 + 确定性断言 + 盲评，测出 Skill 在每个模型上是帮忙还是添乱 |
-| **[Daming-OS](https://github.com/dylanma8232-art/Daming-OS)** | 智能体记忆与自愈底座 | 零依赖、不绑框架的三层语义记忆、防爆仓网关、静态沙箱安检与异常自愈系统 |
-| **[DM-FH5-Telemetry](https://github.com/dylanma8232-art/DM-FH5-Telemetry)** | 赛车遥测与 AI 领航 | 《极限竞速：地平线 5》60Hz 副屏遥测工程台、自动拉力路书与 AI 调校诊断师 |
+作者：**[Dylan.ma](https://github.com/dylanma8232-art)** · [查看主页更多开源工具与实验项目 →](https://github.com/dylanma8232-art?tab=repositories)
 
 欢迎提交 Issue 或 PR（见 [CONTRIBUTING.md](CONTRIBUTING.md)）。如果 `daming-skillgain` 帮你拦住过负迁移的 Skill，欢迎点亮右上角 **Star** 支持。
 

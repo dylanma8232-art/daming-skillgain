@@ -162,15 +162,9 @@ Also includes a **Python SDK**, **REST API (`daming-skillgain[api]`)**, **MCP Se
 
 ---
 
-## Daming Open-Source Suite
+## Author
 
-Co-built by product manager **[Dylan.ma](https://github.com/dylanma8232-art)** and **Daming (大明)**:
-
-| Project | Focus | Summary |
-|---|---|---|
-| **[daming-skillgain](https://github.com/dylanma8232-art/daming-skillgain)** | Skill Quality Gate | Paired With/Without evaluation, deterministic checks, and blind review for Agent Skills |
-| **[Daming-OS](https://github.com/dylanma8232-art/Daming-OS)** | Agent Memory & Self-Healing | Zero-dependency 3-tier memory, context budget gateway, static sandbox gate, and self-healing runtime |
-| **[DM-FH5-Telemetry](https://github.com/dylanma8232-art/DM-FH5-Telemetry)** | Sim-Racing Telemetry & AI Coach | Forza Horizon 5 60Hz UDP second-screen dashboard, automated rally pace notes, and AI tuning engineer |
+Built by **[Dylan.ma](https://github.com/dylanma8232-art)** · [Explore more open-source tools & experiments →](https://github.com/dylanma8232-art?tab=repositories)
 
 Contributions and real-world evaluation stories are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). If `daming-skillgain` helped you catch negative transfer before shipping, consider giving it a **Star**.
 
