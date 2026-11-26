@@ -1,10 +1,8 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="assets/banner-light.png">
-  <img alt="daming-skillgain — Skill 发布前的自动化质检门禁" src="assets/banner-dark.png" width="100%">
-</picture>
-
 <div align="center">
+
+# daming-skillgain
+
+**AI Agent Skill 发布前的自动化质检门禁 —— 用配对对照、确定性断言与匿名盲评取代主观感觉**
 
 <p>
   <a href="README.md"><img alt="简体中文" src="https://img.shields.io/badge/语言-简体中文-c8521b?style=flat-square"></a>
@@ -16,71 +14,81 @@
 </p>
 
 <p>
-  <b>Works with</b>&nbsp;
+  <b>原生支持与无缝桥接</b>&nbsp;
   <img alt="Claude Code" src="https://img.shields.io/badge/Claude_Code-D97757?style=flat-square&logo=claude&logoColor=white">
   <img alt="Codex" src="https://img.shields.io/badge/Codex-18181B?style=flat-square">
   <img alt="Cursor" src="https://img.shields.io/badge/Cursor-18181B?style=flat-square&logo=cursor&logoColor=white">
   <img alt="OpenCode" src="https://img.shields.io/badge/OpenCode-27272A?style=flat-square">
-  <img alt="Any CLI Agent" src="https://img.shields.io/badge/Any_CLI_Agent-Wrapper_Script-52525B?style=flat-square">
+  <img alt="MCP Server" src="https://img.shields.io/badge/MCP_Server-0F766E?style=flat-square">
+  <img alt="Any CLI Agent" src="https://img.shields.io/badge/Any_CLI_Agent-10--Line_Wrapper-52525B?style=flat-square">
 </p>
 
-[30 秒快速上手](#30-秒快速上手) · [报告预览](#报告长什么样) · [宿主接入指南](references/hosts.md) · [更新日志](CHANGELOG.md)
+[为什么需要它](#为什么需要它) · [30 秒快速上手](#30-秒快速上手) · [真实报告预览](#报告长什么样) · [CLI 命令速查](#cli-命令速查) · [宿主接入指南](references/hosts.md) · [更新日志](CHANGELOG.md)
 
 </div>
 
 ---
 
-写了十几个 `SKILL.md`，怎么确认它真的帮上了忙，而不是在暗中拖后腿？
+## 为什么需要它
 
-- **首次发布难自证**：提示词读着很专业，但在真实任务里真的比不挂 Skill 产出更好吗？
-- **跨模型负迁移**：在旗舰模型上是神助攻，换到中小模型后反而导致指令混乱、Token 翻倍、结果退化？
-- **迭代改版无基准**：微调了几句规则，到底修好了问题，还是把原本稳定的能力改坏了？
+写完一份或多份 `SKILL.md` 后，团队和个人最容易踩进三个盲区：
 
-**`daming-skillgain`** 是专为 AI Agent Skill 设计的**发布前质检门禁**。它在同一模型、同一真实任务下自动执行 **「带 Skill」与「不带 Skill」配对对照实验**，结合**零 LLM 确定性断言**与**去标签匿名盲评**，生成一份**单文件离线 HTML 报告**——让你用可复核的证据决定发不发、在哪个模型上开、在哪个模型上关。
+- **首次发布难自证**：提示词读起来条理清晰，但在真实复杂任务里，真的比同一个模型「不挂 Skill」表现更好吗？
+- **跨模型负迁移隐蔽**：在旗舰大模型上是神助攻，换到高性价比中小模型后反而引发指令冲突、Token 翻倍、产物质量倒退。
+- **改版缺乏回归基准**：微调了几条约束，到底是修好了边界问题，还是悄悄把原本稳定的交付改坏了？
 
-> 它只做一件事：诚实衡量 Skill 的真实净增益。不替你改写 Skill，也不是笨重的通用大模型跑分平台。
+**`daming-skillgain`** 是专为 AI Agent Skill 打造的**发布前质检门禁**。它在**同一宿主、同一模型、同一真实任务**下自动运行 **「启用 Skill（With）」与「不启用 Skill（Without）」配对对照实验**，叠加**零 LLM 确定性规则断言**与**剥离条件标签的匿名盲评**，最终生成一份**单文件 100% 离线 HTML 报告**——让你凭可复核证据决定发不发、在哪个模型上开启、在哪个模型上关闭。
+
+> **定位克制而专注**：它只诚实衡量 Skill 的真实净增益，不替你自动改写提示词，也不是笨重的通用大模型跑分榜单。
 
 ---
 
 ## 30 秒快速上手
 
-**在 Agent 或桌面 AI 里使用**：从 [Releases](https://github.com/dylanma8232-art/daming-skillgain/releases/latest) 下载并解压完整 Skill ZIP，在客户端里导入含有 `SKILL.md` 的目录，再说「用 daming-skillgain 给我生成一份示例报告」。客户端需要能读取 Skill 文件并运行本地命令。真正评测其他 Skill 时，还需要至少一个已配置的实验执行工具。见 [Skill 使用说明](SKILL.md)。
+### 方式一：直接导入 Agent 客户端使用（零代码）
 
-### 1. 安装 CLI（注册 `skillgain` 命令）
+前往 [Releases](https://github.com/dylanma8232-art/daming-skillgain/releases/latest) 下载并解压完整 Skill 压缩包，在支持本地命令的客户端（如 Claude Code、Codex、OpenCode、Cursor 等）中导入包含 [`SKILL.md`](SKILL.md) 的目录，直接输入：
+
+> 「用 daming-skillgain 给我生成一份示例报告」或「帮我评测一下某某目录下的 Skill」
+
+详细对话工作流说明见 [`SKILL.md`](SKILL.md)。
+
+### 方式二：安装命令行工具（`skillgain`）
 
 ```bash
 pip install git+https://github.com/dylanma8232-art/daming-skillgain.git
 ```
 
 <details>
-<summary>从源码或 Release 压缩包安装</summary>
+<summary>从源码可编辑安装 / 安装可选扩展（FastAPI、MCP、Anthropic）</summary>
 
 ```bash
 git clone https://github.com/dylanma8232-art/daming-skillgain.git
 cd daming-skillgain
-pip install -e .
+pip install -e .          # 基础 CLI 与核心评测引擎
+pip install -e ".[mcp]"   # 可选：启用 MCP Server 支持
+pip install -e ".[api]"   # 可选：启用 FastAPI 服务支持
+pip install -e ".[all]"   # 安装全部可选扩展
 ```
-
-也可以前往 [Releases](https://github.com/dylanma8232-art/daming-skillgain/releases/latest) 直接下载打包好的 Skill ZIP。
 
 </details>
 
-### 2. 零配置预览真实报告（无需 API Key，1 秒生成）
+**第 1 步 · 零配置预览真实报告（无需任何 API Key，1 秒生成）**：
 
 ```bash
 skillgain demo --open
 ```
 
-无需配置任何密钥，立即在本地生成并打开一份包含 **「有效 / 负迁移警报 / 测不出来」** 三种裁决的自包含交互式 HTML 报告。
+立即在本地生成并打开自包含示例报告，直观体验 **「明确有效 / 负迁移警报 / 测不出来」** 三种完整裁决与真实产物并排对照。
 
-### 3. 本机体检并启动实测
+**第 2 步 · 本机环境体检与 4 问引导实测**：
 
 ```bash
-skillgain doctor   # 自动检查 Python、依赖、本机已安装的 AI CLI 与密钥状态
-skillgain simple   # 问答式引导：回答 4 个问题即可跑完对照并生成 report.html
+skillgain doctor   # 自动检测 Python、依赖、本机已安装的 AI CLI 与密钥就绪状态
+skillgain simple   # 交互式回答 4 个问题（被测 Skill / 任务 / 被测模型 / 评委模型），自动跑完并输出 report.html
 ```
 
-用于 CI 或回归门禁时，可直接传入配置文件免交互运行：
+**第 3 步 · 免交互配置文件运行（适合 CI 与日常回归门禁）**：
 
 ```bash
 skillgain pipeline --profile examples/eval-config.example.json
@@ -90,82 +98,97 @@ skillgain pipeline --profile examples/eval-config.example.json
 
 ## 报告长什么样
 
-![真实报告截图：总结裁决、按模型分拆结果与启用前后真实交付物并排对照](assets/report-screenshot.png)
+![真实报告实拍：首屏通俗总结裁决、负迁移模型警报、自动规则检查清单与启用前后交付物并排对照](assets/report-screenshot.png)
 
-- **首屏直接给裁决**：不堆统计黑话，首屏直接展示大字结论、核心指标、红绿检查清单与负迁移模型警报。
-- **真实交付物并排对照**：直接预览带 Skill 与不带 Skill 产出的实际文件（Markdown、表格、演示稿等），一眼看清差距。
-- **单文件 100% 离线自包含**：CSS 与交互逻辑全部内联、零外部请求，直接把 `.html` 发到群里或贴进 PR 即可复核。
-
----
-
-## 为什么选择 daming-skillgain
-
-| 对比维度 | 手动试跑凭感觉 | 通用 LLM Eval 框架 | **daming-skillgain** |
-|---|---|---|---|
-| 核心目标 | 只能看单次印象 | 测模型/Prompt 榜单均值 | **专测同一模型下 Skill 的净增益（With vs Without）** |
-| 负迁移识别 | 极易漏掉 | 需自行编写统计逻辑 | **自动标红负迁移模型，明确给出关闭建议** |
-| 证据不足处理 | 容易硬下结论 | 只给平均分掩盖波动 | **样本不足或置信区间跨 0 时诚实判为「测不出来」** |
-| 确定性复核 | 无 | 需自行搭建脚本 | **内置零 LLM 规则断言 + 快照独立复算（`verify-snapshot`）** |
-| 报告交付成本 | 聊天截图拼凑 | 需部署 Web 服务 | **单文件离线 HTML，双击即看** |
-| Agent 接入成本 | 低但不可复现 | 需写大量 SDK 代码 | **内置主流 CLI 适配器，或 10 行脚本接入任意 Agent** |
+- **首屏直给通俗裁决**：拒绝晦涩统计术语，首屏直接展示一句话结论、有效/有害模型分布、负迁移红色预警框与下一步操作建议。
+- **客观断言 + 盲评双轨存证**：逐条展示零 LLM 自动规则检查通过率（如文件是否生成、结构/表格/预算是否合规），并附上匿名盲评票数与理由。
+- **真实交付物并排复核**：直接在页面内并排展开「带 Skill」与「不带 Skill」产出的真实文件内容，好在哪、坏在哪一目了然。
+- **单文件离线自包含**：CSS 与交互逻辑全部内联、无任何外链依赖，生成的单个 `.html` 文件可直接发进飞书/微信群或挂入 PR 归档。
 
 ---
 
 ## 三种诚实裁决与评测流水线
 
-- **Effective（有效）**：配对证据表明启用 Skill 后交付质量显著提升，建议在该模型上开启。
-- **Harmful（负迁移 / 有害）**：证据表明启用后产出变差或违规增加，首屏高亮预警，建议在该模型上关闭。
-- **Inconclusive（测不出来）**：有效样本不足或任务波动过大，保留不确定性，绝不强行背书。
+| 裁决结论 | 触发条件 | 行动建议 |
+|---|---|---|
+| **Effective（明确有效）** | 配对重复实验与客观断言/盲评一致表明启用 Skill 后质量稳定提升 | 放心在该模型上启用并发布 |
+| **Harmful（负迁移警报）** | 启用 Skill 后客观规则违约增加或交付质量显著倒退 | 首屏高亮标红，**建议在该模型上关闭**或针对性裁剪指令 |
+| **Inconclusive（测不出来）** | 有效配对样本不足，或得分差值置信区间跨 0、波动过大 | 诚实保留不确定性，绝不强行背书，建议补充样本重测 |
 
 ```mermaid
 flowchart LR
-    A["待测 Skill + 真实任务"] --> B["同模型配对执行<br/>Without Skill vs With Skill"]
-    B --> C["确定性规则断言<br/>(零 LLM · 快照可复算)"]
-    B --> D["评委匿名盲评<br/>(剥离条件标签)"]
-    C --> E["单文件离线 HTML 报告<br/>首屏裁决 · 负迁移预警 · 交付物并排对照"]
+    A["待测 Skill + 真实任务"] --> B["同宿主同模型配对执行<br/>Without Skill vs With Skill"]
+    B --> C["零 LLM 确定性断言<br/>(文件 / 结构 / 数值校验)"]
+    B --> D["剥离标签匿名盲评<br/>(打乱顺序防位置偏见)"]
+    C --> E["快照落盘与统计门禁<br/>(verify-snapshot 独立可复算)"]
     D --> E
+    E --> F["单文件离线 HTML 报告<br/>首屏裁决 · 负迁移预警 · 产物并排对照"]
 ```
 
 ---
 
-## 支持的 AI 工具与接入方式
+## 为什么不用手动试跑或通用跑分框架？
 
-被测 AI 工具本身**无需安装任何插件**，统一通过 `HostProtocol` 调度：
+| 对比维度 | 手动试跑凭感觉 | 通用 LLM Eval 框架 | **daming-skillgain** |
+|---|---|---|---|
+| **核心问题** | 单次主观印象，无法复现 | 测裸模型或静态 Prompt 榜单均值 | **专测同一模型挂载 Skill 前后的真实净增益** |
+| **跨模型负迁移识别** | 极易漏看中小模型退化 | 需自行编写配对统计逻辑 | **自动按模型分拆，标红负迁移模型并提示关闭** |
+| **小样本波动处理** | 容易看一次赢就拍板上线 | 只算平均分，掩盖随机波动 | **置信区间或样本量不达标一律诚实判为 `Inconclusive`** |
+| **客观复核成本** | 无留档 | 需自建校验管线与看板服务 | **内置零 LLM 断言 + 快照复算 + 单文件离线 HTML** |
+| **真实 Agent 接入** | 手动复制粘贴 | 往往只能跑纯文本 API | **原生调度 Claude Code / Codex / OpenCode / Cursor 真实干活** |
 
-| 接入方式 | 支持范围 | 说明 |
+---
+
+## CLI 命令速查
+
+| 命令 | 适用场景 | 说明 |
 |---|---|---|
-| **内置原生适配器** | `opencode` / `claude-code` / `codex` / `cursor-agent` | 通过 `--host <name>` 直接指定；运行 `skillgain doctor` 查看本机可用项 |
-| **通用脚本契约** | Cursor / Trae / Windsurf / 通义灵码 / 任意 CLI Agent | 仅需 5–10 行包装脚本（见 [`examples/wrapper_template.py`](examples/wrapper_template.py)） |
-| **直连模型 API** | `api` / `standalone` / `agent` | 适合纯文本生成任务；涉及文件产出的任务会在预检阶段明确提示 |
-
-除 CLI 外，项目同时提供 **Python SDK**、**REST API（`daming-skillgain[api]`）**、**MCP Server（`daming-skillgain[mcp]`）**，以及可直接安装给 Agent 使用的 [`SKILL.md`](SKILL.md)。完整说明见 [references/usage.md](references/usage.md)。
-
----
-
-## 可信度与适用边界
-
-- **确定性断言优先**：客观规则检查完全不调用大模型；所有规则与判定结果落盘为快照，随时可通过 `skillgain verify-snapshot` 独立复核。
-- **拒绝强行下结论**：配对裁决严格受有效样本数、差值幅度与置信区间门槛约束，不达标一律输出 `Inconclusive`。
-- **匿名盲评防偏见**：评委模型只接收剥离了启用/未启用标签的真实产物，原始评语完整留档备查，不冒充绝对真值。
-- **结果不跨环境外推**：报告显式记录本次实测的宿主、模型与任务范围；切换宿主或任务类型后应重新评测。
+| `skillgain demo [--open]` | 初次体验 | 无需 API Key，1 秒生成包含三种典型裁决的离线交互报告 |
+| `skillgain doctor` | 开跑前自检 | 检查 Python 环境、依赖包、本机可用 AI CLI 与模型凭据状态 |
+| `skillgain simple` | 日常快速评测 | 4 问交互引导，自动串联 `plan → run → evaluate → report` |
+| `skillgain pipeline --profile <json>` | 回归门禁 / CI | 读取配置模板免交互一键跑完全流程 |
+| `skillgain plan / run / evaluate / report` | 高级分步控制 | 分阶段生成评测计划、执行配对采样、重跑评估或重出报告 |
+| `skillgain verify-snapshot <dir>` | 审计独立复核 | 完全脱离大模型，对已落盘实验快照重新校验确定性断言与统计结论 |
 
 ---
 
-## 示例与文档导航
+## 支持的宿主与集成接口
 
+被测 AI 工具本身**无需安装任何插件**，统一通过 `HostProtocol` 无侵入调度：
+
+| 接入层 | 支持范围 | 接入方式 |
+|---|---|---|
+| **内置原生 CLI 适配器** | `opencode` / `claude-code` / `codex` / `cursor-agent` | `--host <name>` 直接指定；运行 `skillgain doctor` 自动探测 |
+| **通用脚本契约** | Cursor / Trae / Windsurf / 通义灵码 / 自研 CLI Agent | 仅需约 10 行包装脚本（模板见 [`examples/wrapper_template.py`](examples/wrapper_template.py)） |
+| **直连模型接口** | OpenAI 兼容接口 / Anthropic SDK | 适合纯文本生成类 Skill；涉及文件落盘的任务会在预检阶段主动提醒 |
+| **服务端与协议集成** | Python SDK / FastAPI (`[api]`) / MCP Server (`[mcp]`) | 可直接挂载进内部研发平台或作为 MCP 工具供桌面 Agent 调用 |
+
+---
+
+## 可信度保障与适用边界
+
+1. **确定性断言优先于大模型打分**：文件存在性、格式合法性、必填字段与数值约束完全由确定性规则判定，不消耗 Token 且零幻觉。
+2. **匿名双盲防偏见**：送交评委模型的两份产物均剥离 `With / Without` 条件标签并随机交换顺序，原始评语全量留档备查。
+3. **结论严格限定实测范围**：报告显式记录本次测试的宿主、模型版本、任务输入与重复次数，不做跨环境过度外推。
+
+---
+
+## 文档导航
+
+- [`SKILL.md`](SKILL.md) — 作为 Agent Skill 被客户端直接调用时的完整规范
 - [`examples/sample-skill/SKILL.md`](examples/sample-skill/SKILL.md) — 开箱即测的示例 Skill
 - [`examples/eval-config.example.json`](examples/eval-config.example.json) — 免交互评测配置模板
-- [`examples/wrapper_template.py`](examples/wrapper_template.py) — 任意 CLI Agent 包装脚本模板
-- [`references/workflow.md`](references/workflow.md) — 分步流水线详解（`plan` → `run` → `evaluate` → `report`）
-- [`references/hosts.md`](references/hosts.md) — 宿主能力矩阵与接入说明
-- [`references/host-protocol.md`](references/host-protocol.md) — 新增原生宿主适配器开发协议
+- [`examples/wrapper_template.py`](examples/wrapper_template.py) — 任意 CLI Agent 10 行包装脚本模板
+- [`references/usage.md`](references/usage.md) — CLI、Python SDK、REST API 与 MCP Server 完整手册
+- [`references/workflow.md`](references/workflow.md) — 四阶段流水线与快照结构详解
+- [`references/hosts.md`](references/hosts.md) & [`references/host-protocol.md`](references/host-protocol.md) — 宿主能力矩阵与自定义适配器协议
 
 ---
 
 ## 关于作者
 
-作者：**[Dylan.ma](https://github.com/dylanma8232-art)** · [查看主页更多开源工具与实验项目 →](https://github.com/dylanma8232-art?tab=repositories)
+作者：**[Dylan.ma](https://github.com/dylanma8232-art)** · **[返回个人主页查看更多开源项目 →](https://github.com/dylanma8232-art)**
 
-欢迎提交 Issue 或 PR（见 [CONTRIBUTING.md](CONTRIBUTING.md)）。如果 `daming-skillgain` 帮你拦住过负迁移的 Skill，欢迎点亮右上角 **Star** 支持。
+欢迎提交 Issue 或 PR（见 [CONTRIBUTING.md](CONTRIBUTING.md)）。如果 `daming-skillgain` 帮你在发布前拦住过负迁移的 Skill，欢迎点亮右上角 **Star** 支持。
 
-License: [GPL-3.0](LICENSE)
+开源协议：[GPL-3.0](LICENSE)

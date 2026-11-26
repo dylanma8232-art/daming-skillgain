@@ -21,7 +21,7 @@ jobs:
           mkdir -p "${PKG_DIR}"
           cp -r SKILL.md README.md README_EN.md CHANGELOG.md LICENSE pyproject.toml requirements.txt evaluator references examples "${PKG_DIR}/"
           mkdir -p "${PKG_DIR}/assets"
-          cp assets/banner-dark.png assets/banner-light.png assets/report-screenshot.png "${PKG_DIR}/assets/"
+          cp assets/report-screenshot.png "${PKG_DIR}/assets/"
           find "${PKG_DIR}" -name "__pycache__" -type d -exec rm -rf {} +
           zip -r "daming-skillgain-${TAG}.zip" "${PKG_DIR}"
 

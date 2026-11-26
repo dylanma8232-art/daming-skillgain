@@ -1,10 +1,8 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="assets/banner-light.png">
-  <img alt="daming-skillgain — Pre-release quality gate for AI Agent Skills" src="assets/banner-dark.png" width="100%">
-</picture>
-
 <div align="center">
+
+# daming-skillgain
+
+**Pre-release quality gate for AI Agent Skills — replace gut feeling with paired experiments, deterministic checks, and blind review**
 
 <p>
   <a href="README.md"><img alt="简体中文" src="https://img.shields.io/badge/语言-简体中文-2b2927?style=flat-square"></a>
@@ -16,71 +14,79 @@
 </p>
 
 <p>
-  <b>Works with</b>&nbsp;
+  <b>Works natively with</b>&nbsp;
   <img alt="Claude Code" src="https://img.shields.io/badge/Claude_Code-D97757?style=flat-square&logo=claude&logoColor=white">
   <img alt="Codex" src="https://img.shields.io/badge/Codex-18181B?style=flat-square">
   <img alt="Cursor" src="https://img.shields.io/badge/Cursor-18181B?style=flat-square&logo=cursor&logoColor=white">
   <img alt="OpenCode" src="https://img.shields.io/badge/OpenCode-27272A?style=flat-square">
-  <img alt="Any CLI Agent" src="https://img.shields.io/badge/Any_CLI_Agent-Wrapper_Script-52525B?style=flat-square">
+  <img alt="MCP Server" src="https://img.shields.io/badge/MCP_Server-0F766E?style=flat-square">
+  <img alt="Any CLI Agent" src="https://img.shields.io/badge/Any_CLI_Agent-10--Line_Wrapper-52525B?style=flat-square">
 </p>
 
-[30-Second Quickstart](#30-second-quickstart) · [Report Preview](#what-the-report-looks-like) · [Host Integrations](references/hosts.md) · [Changelog](CHANGELOG.md)
+[Why daming-skillgain](#why-daming-skillgain) · [30-Second Quickstart](#30-second-quickstart) · [Report Preview](#what-the-report-looks-like) · [CLI Reference](#cli-reference) · [Host Integrations](references/hosts.md) · [Changelog](CHANGELOG.md)
 
 </div>
 
 ---
 
-You have written a dozen `SKILL.md` files — how do you know they actually make your agent better rather than quietly hurting output quality?
+## Why daming-skillgain
 
-- **First release**: The instructions read well, yet do they measurably beat the exact same model *without* the Skill on real tasks?
-- **Cross-model negative transfer**: A Skill that helps a frontier model can confuse smaller models, double token usage, and degrade deliverables.
-- **Iterative edits**: Did your latest prompt edit fix an edge case or introduce a silent regression?
+Writing `SKILL.md` files is easy; proving they actually improve real deliverables without breaking smaller models is hard:
 
-**`daming-skillgain`** is a **pre-release quality gate for AI Agent Skills**. It runs paired **with-Skill vs. without-Skill** experiments on the same model and real task, combines **zero-LLM deterministic assertions** with **anonymized blind reviews**, and outputs a **single-file offline HTML report** — giving you reproducible evidence on whether to ship a Skill, and which models should have it turned on or off.
+- **Unverified first releases**: Instructions may read well, yet do they measurably outperform the exact same model *without* the Skill on real tasks?
+- **Hidden cross-model negative transfer**: A Skill that boosts a frontier model often confuses mid-tier models, inflates token usage, and degrades output quality.
+- **Blind prompt edits**: Tweaking rules without a paired baseline makes it impossible to tell whether an update fixed edge cases or introduced regressions.
 
-> Focused strictly on measuring real net Skill gain: it does not rewrite your Skill and is not a bloated general-purpose LLM benchmark suite.
+**`daming-skillgain`** is a dedicated **pre-release quality gate for AI Agent Skills**. It runs paired **with-Skill vs. without-Skill** experiments on the exact same host, model, and real task, combines **zero-LLM deterministic assertions** with **label-stripped blind reviews**, and writes a **single-file 100% offline HTML report** — giving you reproducible evidence on whether to ship a Skill and which models should keep it enabled or disabled.
 
 ---
 
 ## 30-Second Quickstart
 
-**Use it inside an agent or desktop AI**: Download and extract the complete Skill ZIP from [Releases](https://github.com/dylanma8232-art/daming-skillgain/releases/latest). Import the folder containing `SKILL.md` and ask “Use daming-skillgain to generate a demo report.” The client needs access to the Skill files and local commands. Evaluating another Skill also requires a configured tool to run the experiments. See [the Skill instructions](SKILL.md).
+### Option A: Import Directly into Your Desktop / CLI Agent
 
-### 1. Install the CLI (`skillgain`)
+Download and extract the packaged Skill ZIP from [Releases](https://github.com/dylanma8232-art/daming-skillgain/releases/latest), import the folder containing [`SKILL.md`](SKILL.md) into your agent client (Claude Code, Codex, OpenCode, Cursor, etc.), and ask:
+
+> *"Use daming-skillgain to generate a demo report"* or *"Evaluate the Skill in `./my-skill`"*
+
+See [`SKILL.md`](SKILL.md) for agent-driven usage details.
+
+### Option B: Install the `skillgain` CLI
 
 ```bash
 pip install git+https://github.com/dylanma8232-art/daming-skillgain.git
 ```
 
 <details>
-<summary>Or install from source / Release ZIP</summary>
+<summary>Editable source install & optional extras (MCP, FastAPI, Anthropic)</summary>
 
 ```bash
 git clone https://github.com/dylanma8232-art/daming-skillgain.git
 cd daming-skillgain
-pip install -e .
+pip install -e .          # Core CLI & evaluation engine
+pip install -e ".[mcp]"   # Optional MCP Server support
+pip install -e ".[api]"   # Optional FastAPI server support
+pip install -e ".[all]"   # Install all optional integrations
 ```
-
-Pre-packaged Skill bundles are also available on [Releases](https://github.com/dylanma8232-art/daming-skillgain/releases/latest).
 
 </details>
 
-### 2. Inspect a live report instantly (zero API keys, < 1 second)
+**Step 1 · Preview a real report instantly (zero API keys, < 1 second)**:
 
 ```bash
 skillgain demo --open
 ```
 
-Generates and opens a self-contained HTML report demonstrating all three verdicts (**Effective**, **Harmful / Negative Transfer**, and **Inconclusive**) with zero configuration.
+Generates and opens a self-contained interactive report demonstrating all three verdicts (**Effective**, **Harmful / Negative Transfer**, and **Inconclusive**) alongside side-by-side deliverables.
 
-### 3. Check your local tools & run an evaluation
+**Step 2 · Check local readiness & launch the guided 4-question wizard**:
 
 ```bash
-skillgain doctor   # Inspect Python, deps, detected AI CLIs, and API key status
-skillgain simple   # Guided 4-question wizard -> runs paired tasks and writes report.html
+skillgain doctor   # Inspects Python, dependencies, installed AI CLIs, and API credentials
+skillgain simple   # Answer 4 questions -> runs paired experiments and outputs report.html
 ```
 
-For CI or repeatable regression checks, pass a profile directly:
+**Step 3 · Run non-interactively in CI or regression pipelines**:
 
 ```bash
 skillgain pipeline --profile examples/eval-config.example.json
@@ -90,82 +96,77 @@ skillgain pipeline --profile examples/eval-config.example.json
 
 ## What the Report Looks Like
 
-![Actual report screenshot: summary verdict, per-model breakdown, and side-by-side deliverables](assets/report-screenshot.png)
+![Actual report screenshot: plain-language summary verdict, negative-transfer warning, deterministic rule checklist, and side-by-side deliverables](assets/report-screenshot.png)
 
-- **Decision-first first screen**: Clear verdict headline, core metrics, pass/fail rule checklist, and explicit negative-transfer warnings.
-- **Side-by-side deliverables**: Inspect actual files produced with and without the Skill (Markdown, spreadsheets, slides, code).
-- **100% offline single file**: All CSS and scripts are inlined with zero external requests — drop the `.html` file into Slack, PRs, or email.
-
----
-
-## Why daming-skillgain
-
-| Dimension | Manual spot-checks | Generic LLM eval frameworks | **daming-skillgain** |
-|---|---|---|---|
-| Core question | Gut feeling | Model / prompt leaderboards | **Net paired Skill gain on the same model (With vs. Without)** |
-| Negative transfer | Easily missed | Build custom stats | **Highlights degraded models and recommends turning the Skill off** |
-| Insufficient evidence | Tempts guessing | Raw averages hide variance | **Reports `Inconclusive` when confidence intervals cross zero** |
-| Reproducibility | Unrepeatable | Heavy custom plumbing | **Zero-LLM rule assertions + `skillgain verify-snapshot`** |
-| Sharing results | Chat screenshots | Needs a running web server | **Single-file offline HTML** |
-| Host onboarding | Ad-hoc | SDK & dataset boilerplate | **Built-in CLI adapters or a 10-line wrapper script for any agent** |
+- **Decision-first summary**: Plain-language headline, per-model breakdown, and high-visibility red alerts for models suffering negative transfer.
+- **Deterministic checks + blind review**: Zero-LLM rule pass/fail checklists paired with anonymized judge votes and preserved rationales.
+- **Side-by-side deliverables**: Inspect actual artifacts generated with and without the Skill directly inside the page.
+- **100% offline single file**: All CSS and scripts are inlined with zero external requests — share the `.html` file directly in PRs, Slack, or email.
 
 ---
 
-## Three Honest Verdicts & Pipeline
+## Three Honest Verdicts & Evaluation Pipeline
 
-- **Effective**: Paired evidence confirms better deliverables with the Skill; safe to enable on that model.
-- **Harmful (Negative Transfer)**: Evidence shows degraded output; surfaced on the first screen so you disable it on that model.
-- **Inconclusive**: Sample size is too small or variance is too high; uncertainty stays explicit instead of forcing a call.
+| Verdict | Criteria | Recommended Action |
+|---|---|---|
+| **Effective** | Paired runs, deterministic checks, and blind review consistently show improved output | Safe to enable and ship on that model |
+| **Harmful (Negative Transfer)** | Enabling the Skill increases rule violations or degrades deliverable quality | Highlighted on the first screen — **disable on that model** or trim instructions |
+| **Inconclusive** | Sample size is insufficient or confidence intervals cross zero due to task variance | Uncertainty stays explicit instead of forcing a false positive |
 
 ```mermaid
 flowchart LR
-    A["Skill + Real Task"] --> B["Same-Model Paired Runs<br/>Without Skill vs. With Skill"]
-    B --> C["Deterministic Checks<br/>(Zero-LLM · Verifiable Snapshot)"]
-    B --> D["Anonymous Blind Review<br/>(Condition Labels Stripped)"]
-    C --> E["Single-File Offline HTML Report<br/>Verdict · Negative-Transfer Alert · Side-by-Side Diff"]
+    A["Skill + Real Task"] --> B["Same-Host Same-Model Paired Runs<br/>Without Skill vs. With Skill"]
+    B --> C["Zero-LLM Deterministic Checks<br/>(Files · Schema · Constraints)"]
+    B --> D["Label-Stripped Blind Review<br/>(Randomized Order)"]
+    C --> E["Auditable Snapshot & Thresholds<br/>(skillgain verify-snapshot)"]
     D --> E
+    E --> F["Single-File Offline HTML Report<br/>Verdict · Negative-Transfer Alert · Diff View"]
 ```
 
 ---
 
-## Supported AI Tools & Interfaces
+## CLI Reference
 
-The agent under test requires **no plugins**. Everything runs through `HostProtocol`:
-
-| Integration | Supported Tools | Notes |
+| Command | Use Case | Description |
 |---|---|---|
-| **Built-in Adapters** | `opencode`, `claude-code`, `codex`, `cursor-agent` | Select via `--host <name>`; run `skillgain doctor` to inspect local readiness |
-| **Universal Script Contract** | Cursor, Trae, Windsurf, Cline, or any CLI agent | Wrap any CLI in ~10 lines (see [`examples/wrapper_template.py`](examples/wrapper_template.py)) |
-| **Direct Model API** | `api`, `standalone`, `agent` | Ideal for text-only tasks; file-producing tasks are flagged during preflight |
-
-Also includes a **Python SDK**, **REST API (`daming-skillgain[api]`)**, **MCP Server (`daming-skillgain[mcp]`)**, and a ready-to-install [`SKILL.md`](SKILL.md). See [references/usage.md](references/usage.md).
-
----
-
-## Evidence & Boundaries
-
-- **Deterministic checks first**: Built-in assertions never call an LLM; rules and results are snapshotted and independently verifiable via `skillgain verify-snapshot`.
-- **No forced verdicts**: Verdicts enforce sample, delta, and confidence thresholds; insufficient evidence stays `Inconclusive`.
-- **Blind review as audited evidence**: Judges compare anonymized outputs and raw rationale is preserved rather than treated as absolute truth.
-- **No cross-host extrapolation**: Reports explicitly state which host, models, and task were tested.
+| `skillgain demo [--open]` | Zero-setup tour | Generates an offline interactive sample report in < 1s without API keys |
+| `skillgain doctor` | Preflight diagnostics | Checks Python, packages, detected local AI CLIs, and credential readiness |
+| `skillgain simple` | Everyday evaluation | 4-question wizard chaining `plan → run → evaluate → report` |
+| `skillgain pipeline --profile <json>` | CI / Regression gate | Non-interactive end-to-end execution from a JSON profile |
+| `skillgain plan / run / evaluate / report` | Granular control | Run individual pipeline stages or re-render reports from existing runs |
+| `skillgain verify-snapshot <dir>` | Offline audit | Re-verifies deterministic assertions and verdict math from saved snapshots with zero LLM calls |
 
 ---
 
-## Examples & Documentation
+## Supported Hosts & Interfaces
 
-- [`examples/sample-skill/SKILL.md`](examples/sample-skill/SKILL.md) — Ready-to-test sample Skill
+The agent under test requires **zero plugins** — everything dispatches cleanly via `HostProtocol`:
+
+| Layer | Supported Targets | How It Connects |
+|---|---|---|
+| **Built-in CLI Adapters** | `opencode`, `claude-code`, `codex`, `cursor-agent` | Pass `--host <name>`; auto-detected by `skillgain doctor` |
+| **Universal Script Contract** | Cursor, Trae, Windsurf, Cline, or any custom CLI agent | ~10-line wrapper script (see [`examples/wrapper_template.py`](examples/wrapper_template.py)) |
+| **Direct Model API** | OpenAI-compatible endpoints & Anthropic SDK | Best for text-only tasks; file-producing tasks trigger preflight warnings |
+| **Service & Tool Protocols** | Python SDK, FastAPI (`[api]`), MCP Server (`[mcp]`) | Embed into internal CI dashboards or expose as an MCP tool |
+
+---
+
+## Documentation
+
+- [`SKILL.md`](SKILL.md) — Instructions when invoked directly as an Agent Skill
+- [`examples/sample-skill/SKILL.md`](examples/sample-skill/SKILL.md) — Ready-to-evaluate sample Skill
 - [`examples/eval-config.example.json`](examples/eval-config.example.json) — Non-interactive evaluation profile template
-- [`examples/wrapper_template.py`](examples/wrapper_template.py) — Universal script adapter for any CLI agent
-- [`references/workflow.md`](references/workflow.md) — Step-by-step pipeline (`plan` → `run` → `evaluate` → `report`)
-- [`references/hosts.md`](references/hosts.md) — Host capability matrix & integration guide
-- [`references/host-protocol.md`](references/host-protocol.md) — Implementing a new native host adapter
+- [`examples/wrapper_template.py`](examples/wrapper_template.py) — Universal wrapper template for any CLI agent
+- [`references/usage.md`](references/usage.md) — Full CLI, Python SDK, REST API, and MCP Server guide
+- [`references/workflow.md`](references/workflow.md) — 4-stage pipeline & snapshot specification
+- [`references/hosts.md`](references/hosts.md) & [`references/host-protocol.md`](references/host-protocol.md) — Host capability matrix & adapter protocol
 
 ---
 
 ## Author
 
-Built by **[Dylan.ma](https://github.com/dylanma8232-art)** · [Explore more open-source tools & experiments →](https://github.com/dylanma8232-art?tab=repositories)
+Built by **[Dylan.ma](https://github.com/dylanma8232-art)** · **[Visit profile for more open-source projects →](https://github.com/dylanma8232-art)**
 
-Contributions and real-world evaluation stories are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). If `daming-skillgain` helped you catch negative transfer before shipping, consider giving it a **Star**.
+Contributions and evaluation stories are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). If `daming-skillgain` helped you catch negative transfer before shipping, consider giving it a **Star**.
 
 License: [GPL-3.0](LICENSE)
