@@ -1,7 +1,7 @@
 ---
 name: daming-skillgain
 description: 用可复现的对照实验验证某个 Skill 是否真的有效——同模型 with/without 配对执行、确定性断言判定优先、评委盲评辅助，产出结果导向的静态 HTML 报告。当用户要判断 skill 有没有用、是否值得发布、换模型后是否失效、改版后变好还是变坏，或需要评测/回归某个 skill 时使用。
-license: GPL-3.0
+license: CC-BY-NC-SA-4.0
 metadata:
   audience: developers
   workflow: evaluation

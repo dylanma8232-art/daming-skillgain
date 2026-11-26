@@ -10,7 +10,7 @@
   <a href="https://github.com/dylanma8232-art/daming-skillgain/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/dylanma8232-art/daming-skillgain/ci.yml?style=flat-square&label=CI"></a>
   <a href="https://github.com/dylanma8232-art/daming-skillgain/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/dylanma8232-art/daming-skillgain?display_name=tag&style=flat-square"></a>
   <a href="pyproject.toml"><img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776ab?style=flat-square"></a>
-  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/License-GPL--3.0-2e7d32?style=flat-square"></a>
+  <a href="LICENSE"><img alt="License: CC BY-NC-SA 4.0" src="https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-b45309?style=flat-square"></a>
 </p>
 
 <p>
@@ -169,4 +169,4 @@ Built by **[dylanma8232-art](https://github.com/dylanma8232-art)** · **[Visit p
 
 Contributions and evaluation stories are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). If `daming-skillgain` helped you catch negative transfer before shipping, consider giving it a **Star**.
 
-License: [GPL-3.0](LICENSE)
+License: [CC BY-NC-SA 4.0](LICENSE)
